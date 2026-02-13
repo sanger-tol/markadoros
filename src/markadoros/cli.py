@@ -14,14 +14,46 @@ def cli():
 
 
 @cli.command()
-@click.option("--bold", is_flag=True, default=False)
-@click.option("--marker", type=str, required=False)
-@click.option("--outdir", type=click.Path(exists=True), default=Path.cwd())
-@click.option("--threads", type=int, default=1)
-@click.option("--min_len", type=int, default=300)
+@click.option(
+    "--bold",
+    is_flag=True,
+    default=False,
+    help="Input FASTA is a multi-barcode BOLD release.",
+)
+@click.option(
+    "--marker",
+    type=str,
+    required=False,
+    help="Name of marker gene for the database being created (e.g., COI, CYTB, rbcL). Required if --bold is not specified.",
+)
+@click.option(
+    "--outdir",
+    type=click.Path(exists=True),
+    default=Path.cwd(),
+    help="Output directory for databases. Defaults to current working directory.",
+)
+@click.option(
+    "--threads",
+    type=int,
+    default=1,
+    help="Number of threads to use for MMSeqs2 database creation.",
+)
+@click.option(
+    "--min_len",
+    type=int,
+    default=300,
+    help="Minimum sequence length in bp. Sequences shorter than this will be excluded.",
+)
 @click.argument("fasta", type=click.Path(exists=True))
-def build_database(bold, marker, fasta, mmseqs_path, outdir, threads, min_len):
-    """Build MMSeqs databases from a FASTA release."""
+def build_database(bold, marker, fasta, outdir, threads, min_len):
+    """
+    Build MMSeqs2 databases from a FASTA file.
+
+    This command creates MMSeqs2 searchable databases from barcode sequences.
+    You can either:
+    - Provide a BOLD FASTA file with --bold flag (sequences split by marker automatically)
+    - Provide a FASTA file with a single marker gene using --marker option
+    """
 
     if not marker and not bold:
         raise ValueError("Either --bold or --marker must be specified")
@@ -31,12 +63,15 @@ def build_database(bold, marker, fasta, mmseqs_path, outdir, threads, min_len):
             f"Input FASTA is a BOLD FASTA (--bold): --marker {marker} will be ignored."
         )
 
+    if not outdir.exists():
+        outdir.mkdir(parents=True, exist_ok=True)
+
     bold_processor = DatabaseCreator(
         outdir=outdir,
         min_len=min_len,
     )
     bold_processor.create_marker_database(
-        fasta=fasta, markers=marker, is_bold_fasta=bold
+        fasta=fasta, marker=marker, is_bold_fasta=bold
     )
 
 

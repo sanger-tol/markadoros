@@ -15,11 +15,13 @@ from markadoros.utils import get_canonical_sequence
 class DatabaseCreator:
     def __init__(self, outdir: Path, min_length: int, deduplicate: bool) -> None:
         self.outdir = outdir
+        self.min_length = min_length
+        self.deduplicate = deduplicate
 
     def _split_barcodes(
         self,
         fasta: Path,
-        marker_dict: dict,
+        marker_dict: dict[str, str],
         tmpdir: Path,
     ) -> dict:
         """Split FASTA records by marker type, with optional deduplication."""
@@ -61,7 +63,7 @@ class DatabaseCreator:
                             seen_sequences[marker_name].add(seq_hash)
 
                         output_handles[marker_name].write(
-                            f">{record.name}\n{record.sequence}\n"
+                            f">{record.name}\n{record.sequence}\n".encode()
                         )
 
         except IOError as e:
@@ -97,6 +99,7 @@ class DatabaseCreator:
         """
         if is_bold_fasta:
             tmpdir = self.outdir / "tmp"
+            tmpdir.mkdir(parents=True, exist_ok=True)
 
             outfiles_dict = self._split_barcodes(
                 fasta=fasta, marker_dict=VALID_MARKERS, tmpdir=tmpdir
@@ -121,7 +124,7 @@ class DatabaseCreator:
             db_path = self.outdir / marker / "db"
 
             db_config = CreateMMSeqsDBConfig(
-                fasta_file=fasta_file, sequence_db=db_path, db_type=2, v=1
+                fasta_file=fasta, sequence_db=db_path, db_type=2, v=1
             )
             db_config.run()
 
