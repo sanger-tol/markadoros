@@ -3,7 +3,7 @@ from pathlib import Path
 from Bio import Seq
 
 
-def get_simple_name(self, input: Path) -> str:
+def get_simple_name(input: Path) -> str:
     """Strip file extension, handling compound extensions like .fastq.gz"""
     if input.name.lower().endswith(".gz"):
         return Path(input.name[:-3]).stem
@@ -11,7 +11,7 @@ def get_simple_name(self, input: Path) -> str:
     return input.stem
 
 
-def get_canonical_sequence(self, seq) -> str:
+def get_canonical_sequence(seq) -> str:
     """
     Get the canonical form of a sequence (lexicographically smaller of seq and its reverse complement).
     """
