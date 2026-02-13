@@ -63,8 +63,8 @@ def build_database(bold, marker, fasta, outdir, threads, min_len):
             f"Input FASTA is a BOLD FASTA (--bold): --marker {marker} will be ignored."
         )
 
-    if not outdir.exists():
-        outdir.mkdir(parents=True, exist_ok=True)
+    if not Path(outdir).exists():
+        Path(outdir).mkdir(parents=True, exist_ok=True)
 
     bold_processor = DatabaseCreator(
         outdir=outdir,
