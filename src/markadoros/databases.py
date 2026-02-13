@@ -8,9 +8,8 @@ import click
 import pysam
 from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 
+from markadoros.constants import VALID_MARKERS
 from markadoros.utils import get_canonical_sequence
-
-from . import VALID_MARKERS
 
 
 class DatabaseCreator:
