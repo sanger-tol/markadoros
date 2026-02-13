@@ -5,7 +5,7 @@ import click
 
 from markadoros.databases import DatabaseCreator, validate_db
 from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.short_read_analysis import ShortReadAnalyser
+from markadoros.short_read_analyser import ShortReadAnalyser
 
 
 @click.group()
@@ -60,7 +60,9 @@ def search_long_reads(ctx):
 @click.option("--min_seq_id", type=float, default=0.96)
 @click.option("--min_aln_len", type=int, default=250)
 @click.argument("short_reads", type=click.Path(exists=True))
-def search_short_reads(short_reads, rna, db, outdir, nreads, threads, markers):
+def search_short_reads(
+    short_reads, rna, db, outdir, nreads, threads, markers, min_seq_id, min_aln_len
+):
     """
     Search a set of short reads against a marker database, extract the results,
     assemble then with SPAdes and then search the assembled contigs.
