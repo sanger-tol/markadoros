@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from Bio import Seq
+from Bio.Seq import Seq
 
 
 def get_simple_name(input: Path) -> str:
@@ -11,7 +11,7 @@ def get_simple_name(input: Path) -> str:
     return input.stem
 
 
-def get_canonical_sequence(seq) -> str:
+def get_canonical_sequence(seq: str) -> str:
     """
     Get the canonical form of a sequence (lexicographically smaller of seq and its reverse complement).
     """

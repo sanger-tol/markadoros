@@ -40,19 +40,38 @@ class DatabaseCreator:
             else None
         )
 
+        # Build a lookup dict for faster marker matching
+        marker_search_map = {
+            search_string: marker_name
+            for marker_name, search_string in marker_dict.items()
+        }
+
         try:
+            seq_count = 0
             with pysam.FastxFile(fasta, persist=False) as fh:
                 for record in fh:
-                    if len(record.sequence) < self.min_length:
+                    seq_count += 1
+                    if seq_count % 100000 == 0:
+                        click.echo(f"Processed {seq_count:,} sequences", err=True)
+
+                    seq_len = len(record.sequence)
+                    if seq_len < self.min_length:
                         continue
 
-                    record_marker = record.name.split("|")[1]
+                    # Parse marker once
+                    try:
+                        record_marker = record.name.split("|")[1]
+                    except IndexError:
+                        continue
 
+                    # Compute hash once if deduplicating
+                    seq_hash = None
                     if self.deduplicate:
                         canonical_seq = get_canonical_sequence(record.sequence)
                         seq_hash = hashlib.md5(canonical_seq.encode()).hexdigest()
 
-                    for marker_name, search_string in marker_dict.items():
+                    # Find matching marker
+                    for search_string, marker_name in marker_search_map.items():
                         if search_string not in record_marker:
                             continue
 
@@ -62,9 +81,11 @@ class DatabaseCreator:
                         if self.deduplicate:
                             seen_sequences[marker_name].add(seq_hash)
 
-                        output_handles[marker_name].write(
-                            f">{record.name}\n{record.sequence}\n".encode()
-                        )
+                        # Write directly as bytes (avoid intermediate string formatting)
+                        handle = output_handles[marker_name]
+                        handle.write(b">")
+                        handle.write(record.name.encode() + b"\n")
+                        handle.write(record.sequence.encode() + b"\n")
 
         except IOError as e:
             raise IOError(f"Could not open file: {e}") from e
