@@ -1,4 +1,8 @@
+import gzip
 from pathlib import Path
+
+import click
+import pysam
 
 from markadoros.utils import get_simple_name
 
@@ -15,7 +19,9 @@ class ReadPreprocessor:
         self.simple_name = get_simple_name(input)
         self.n_reads = n_reads
         self.subsampled_reads = None
-        self.outdir = outdir
+        self.outdir = Path(outdir)
+        if not self.outdir.exists():
+            self.outdir.mkdir(parents=True)
 
     def _subsample_reads_cram(self) -> Path:
         """
@@ -23,12 +29,12 @@ class ReadPreprocessor:
         """
         outfile = self.outdir / f"{self.simple_name}.subsampled.fastq.gz"
 
-        cram = pysam.AlignmentFile(self.input, "rc")
-        with gzip.open(outfile, "wt") as f:
-            for i, read in enumerate(cram):
-                if i >= self.nreads:
-                    break
+        if not Path(str(self.input) + ".crai").exists():
+            raise ValueError(f"CRAM file {self.input} is missing .crai index")
 
+        cram = pysam.AlignmentFile(self.input, "rc", check_sq=False)
+        with gzip.open(outfile, "wt") as f:
+            for read in cram.head(self.n_reads):
                 name_suffix = "/1" if read.is_read1 else "/2"
                 f.write(f"@{read.query_name}{name_suffix}\n")
                 f.write(f"{read.query_sequence}\n")
@@ -47,7 +53,7 @@ class ReadPreprocessor:
 
         with pysam.FastxFile(self.input) as fin, gzip.open(outfile, mode="wt") as fout:
             for i, entry in enumerate(fin):
-                if i >= self.nreads:
+                if i >= self.n_reads:
                     break
 
                 fout.write(str(entry) + "\n")
@@ -65,16 +71,15 @@ class ReadPreprocessor:
         }
 
         file_key = (
-            "".join(input.suffixes[-2:]) if input.suffix == ".gz" else input.suffix
+            "".join(self.input.suffixes[-2:])
+            if self.input.suffix == ".gz"
+            else self.input.suffix
         )
 
         if file_key not in handlers:
-            raise ValueError(f"Unsupported input format: {input.name}")
+            raise ValueError(f"Unsupported input format: {self.input.name}")
 
-        subsampled_reads = handlers[file_key](input)
-        subsampled_db = self.outdir / get_simple_name(input) / "db"
-        MMSeqsCreateDBConfig(
-            fasta_file=subsampled_reads, sequence_db=subsampled_db, db_type=2, v=1
-        )
+        click.echo(f"Extracting the first {self.n_reads} reads from {self.input.name}")
+        subsampled_reads = handlers[file_key]()
 
-        return subsampled_db
+        return subsampled_reads

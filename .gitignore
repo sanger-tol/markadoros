@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+.zed/
+
+# Local testing
+markadoros.db/
+markadoros.out/
