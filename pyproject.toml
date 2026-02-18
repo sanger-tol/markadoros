@@ -1,12 +1,16 @@
 [project]
 name = "markadoros"
 version = "0.1.0"
-description = "Add your description here"
+description = "Markadoros is a tool for the identification and assembly of barcode genes in raw sequencing data."
 readme = "README.md"
 authors = [
     { name = "Jim Downie", email = "jd42@sanger.ac.uk" }
 ]
-requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.11"
 dependencies = [
     "biopython>=1.86",
     "click>=8.3.1",
@@ -16,6 +20,12 @@ dependencies = [
     "pysam>=0.23.3",
     "scikit-learn>=1.8.0",
 ]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/sanger-tol/markadoros/"
+Issues = "https://github.com/sanger-tol/markadoros/issues"
 
 [project.scripts]
 markadoros = "markadoros:cli"
@@ -30,3 +40,10 @@ include = [
 [build-system]
 build-backend  = 'hatchling.build'
 requires       = ['hatchling']
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest>=8.3.4"]

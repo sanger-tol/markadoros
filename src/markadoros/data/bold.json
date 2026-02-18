@@ -3,7 +3,7 @@
         "deduplicate": true,
         "seq_id_regex": "^([^|]+)",
         "marker_id_regex": "^[^|]+\\|([^|]+)\\|",
-        "taxon_id_regex": "\\|[^|]*?([^,None][^,]*)(?:,None)*$"
+        "taxon_id_regex": "^[^|]*\\|[^|]*\\|[^|]*\\|([^|]*)$"
     },
     "databases": {
         "BOLD_COI": {

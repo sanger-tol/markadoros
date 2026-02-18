@@ -1,14 +1,14 @@
 import json
-import shutil
+import time
+from datetime import timedelta
 from pathlib import Path
 
 import click
 
 from markadoros.data import BOLD_CONFIG, UNITE_CONFIG
-from markadoros.databases import DatabaseCreator, validate_db
-from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.short_read_analyser import ShortReadAnalyser
-from markadoros.spades import SpadesRunner
+from markadoros.database_creator import DatabaseCreator
+from markadoros.search_pipeline import SearchPipeline
+from markadoros.utils import validate_and_load_index
 
 
 @click.group()
@@ -23,7 +23,7 @@ def cli():
     help="Use a preset profile to generate databases.",
 )
 @click.option(
-    "--db_params",
+    "--db-params",
     type=click.Path(exists=True),
     help="If the input FASTA file contains sequences from multiple barcode genes, the path to a JSON file describing each sub-database to be generated.",
 )
@@ -47,16 +47,20 @@ def cli():
 )
 @click.argument("fasta", type=click.Path(exists=True))
 def build_database(
-    preset,
-    db_params,
-    fasta,
-    outdir,
-    threads,
-    cleanup,
+    preset: str,
+    db_params: str,
+    fasta: str,
+    outdir: str,
+    threads: int,
+    cleanup: bool,
 ):
     """
     Build MMSeqs2 databases from a FASTA file, and record their parameters.
+
+    FASTA: Path to the FASTA file to build the database from.
     """
+    start_time = time.perf_counter()
+
     if preset == "bold":
         db_dict = BOLD_CONFIG
     elif preset == "unite":
@@ -64,124 +68,117 @@ def build_database(
     else:
         db_dict = json.load(db_params)
 
-    fasta = Path(fasta)
-
-    bold_processor = DatabaseCreator(
+    database_creator = DatabaseCreator(
         outdir=outdir,
         db_dict=db_dict,
     )
-    bold_processor.create_marker_database(
-        fasta=fasta,
+    database_creator.create_marker_database(
+        fasta=Path(fasta),
     )
 
+    elapsed = time.perf_counter() - start_time
+    formatted_time = str(timedelta(seconds=int(elapsed)))
+
+    click.echo(f"Finished! Database creation completed in {formatted_time}.")
+
     if cleanup:
-        shutil.rmtree(outdir / "tmp")
-
-
-@cli.command()
-@click.option("--db", type=click.Path(exists=True), required=True)
-@click.option("--outdir", type=click.Path(exists=True), default=Path.cwd())
-@click.argument("long_reads", type=click.Path(exists=True))
-def search_long_reads():
-    pass
+        database_creator.cleanup()
 
 
 @cli.command()
 @click.option(
-    "--rna",
-    is_flag=True,
-    help="Input sequences for searching are RNA. SPAdes will be run in RNA assembly mode.",
+    "--platform",
+    type=str,
+    help="Input read platform. One of illumina, illumina_rnaseq, pacbio_hifi, oxford_nanopore.",
 )
 @click.option(
     "--index",
     type=click.Path(exists=True, dir_okay=False),
     required=True,
-    help="Path to the database JSON file.",
+    help="Path to the marker database index JSON file.",
 )
 @click.option(
-    "--outdir", type=click.Path(exists=False), default=Path.cwd() / "markadoros.out"
+    "--outdir",
+    type=click.Path(exists=False),
+    default=Path.cwd(),
 )
 @click.option(
     "--prefix",
     type=str,
+    help="Output file prefix.",
 )
-@click.option("--nreads", type=int, default=10000000)
-@click.option("--threads", type=int, default=1)
-@click.option("--db", type=str)
+@click.option(
+    "--nreads",
+    type=int,
+    help="Number of reads to process. If unspecified, all reads are processed.",
+)
+@click.option(
+    "--threads",
+    type=int,
+    default=1,
+    help="Number of threads to use for searching and assembly.",
+)
+@click.option(
+    "--db",
+    type=str,
+    help="Optionally, the name of a single database within the index file to search with.",
+)
 @click.option(
     "--cleanup",
     is_flag=True,
-    help="Remove temporary files after processing.",
     default=True,
+    help="Clean up temporary files after completion.",
 )
-@click.argument("short_reads", type=click.Path(exists=True))
-def search_short_reads(
-    rna, index, outdir, prefix, nreads, threads, db, cleanup, short_reads
+@click.argument(
+    "reads",
+    type=click.Path(exists=True),
+)
+def search_reads(
+    platform: str,
+    index: str,
+    outdir: str,
+    prefix: str,
+    nreads: int,
+    threads: int,
+    db: str,
+    cleanup: bool,
+    reads: str,
 ):
+    """Search a set of short reads against a marker database.
+
+    READS: Path to the reads file (FASTX or CRAM) to search for barcodes in.
     """
-    Search a set of short reads against a marker database, extract the results,
-    assemble then with SPAdes and then search the assembled contigs.
-    """
-    ## Load the database JSON
+    start_time = time.perf_counter()
+
+    # Load and validate database
     try:
-        index = validate_db(Path(index))
-    except (FileNotFoundError, json.JSONDecodeError):
-        raise ValueError(f"Could not load database from {index}!")
+        database_index = validate_and_load_index(Path(index))
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise click.ClickException(f"Could not load database from {index}: {e}")
 
-    outdir = Path(outdir)
-    short_reads = Path(short_reads)
-
-    ## Subsample the input reads
-    preprocessed_reads = ReadPreprocessor(
-        input=short_reads,
-        outdir=outdir / "tmp",
-        n_reads=nreads,
-    )
-    subsampled_reads_db = preprocessed_reads.subsample_reads()
-
-    short_read_analysis = ShortReadAnalyser(
-        outdir=outdir,
+    # Run pipeline
+    pipeline = SearchPipeline(
+        outdir=Path(outdir),
         threads=threads,
-        prefix=prefix if prefix is not None else short_reads.stem,
-        assembler=SpadesRunner(threads=threads, rna=rna),
-        rmtmp=cleanup,
+        platform=platform,
+        cleanup=cleanup,
+        database_index=database_index,
     )
 
-    ## Run across all databases unless specific one specified
-    databases_list = index.keys()
-    if db is not None:
-        if db not in databases_list:
-            raise ValueError(f"Database {db} not found in index!")
-        databases_list = [db]
+    pipeline.run(
+        reads=Path(reads),
+        n_reads=nreads,
+        db_name=db,
+        prefix=prefix,
+    )
 
-    results = {}
-    for db, params in index.items():
-        if db in databases_list:
-            result = short_read_analysis.analyse_short_reads(
-                input_reads=subsampled_reads_db,
-                marker=params.get("marker"),
-                db=Path(params.get("db")),
-                min_seq_id=params.get("min_seq_id"),
-                min_aln_len=params.get("min_aln_len"),
-            )
-            if result is not None:
-                results[db] = result
+    elapsed = time.perf_counter() - start_time
+    formatted_time = str(timedelta(seconds=int(elapsed)))
 
-    ## Print some result summary
-    for db, result in results.items():
-        click.echo()
-        click.echo(f"Top result for {db}:")
-        out = result.head(1).reset_index()
-        for _, row in out.iterrows():
-            click.echo(f"target: {row['target']}")
-            click.echo(f"query: {row['query']}")
-            click.echo(f"fident: {row['fident']}")
-            click.echo(f"alnlen: {row['alnlen']}")
-            click.echo(f"coverage: {row['coverage']}x")
-            click.echo()
+    click.echo(f"Finished! Sequences searched in {formatted_time}.")
 
     if cleanup:
-        shutil.rmtree(outdir / "tmp")
+        pipeline.cleanup()
 
 
 if __name__ == "__main__":
