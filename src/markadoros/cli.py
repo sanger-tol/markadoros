@@ -7,11 +7,19 @@ import click
 
 from markadoros.data import BOLD_CONFIG, UNITE_CONFIG
 from markadoros.database_creator import DatabaseCreator
+from markadoros.header_processor import (
+    process_bold_header,
+    process_unite_header,
+)
 from markadoros.search_pipeline import SearchPipeline
 from markadoros.utils import validate_and_load_index
 
 
 @click.group()
+@click.version_option(
+    package_name="markadoros",
+    message="%(prog)s %(version)s",
+)
 def cli():
     pass
 
@@ -19,34 +27,38 @@ def cli():
 @cli.command()
 @click.option(
     "--preset",
-    type=str,
+    "-p",
+    type=click.Choice(["bold", "unite"]),
     help="Use a preset profile to generate databases.",
+    default=None,
 )
 @click.option(
     "--db-params",
     type=click.Path(exists=True),
-    help="If the input FASTA file contains sequences from multiple barcode genes, the path to a JSON file describing each sub-database to be generated.",
+    help="If building a custom database, a JSON file describing each sub-database to be generated.",
 )
 @click.option(
     "--outdir",
+    "-o",
     type=click.Path(),
     default=Path.cwd() / "markadoros.db",
     help="Output directory for databases. Defaults to current working directory.",
 )
 @click.option(
     "--threads",
+    "-t",
     type=int,
     default=1,
     help="Number of threads to use for MMSeqs2 database creation.",
 )
 @click.option(
-    "--cleanup",
+    "--cleanup/--no-cleanup",
     is_flag=True,
     default=True,
     help="Clean up temporary files after database creation.",
 )
 @click.argument("fasta", type=click.Path(exists=True))
-def build_database(
+def database(
     preset: str,
     db_params: str,
     fasta: str,
@@ -63,14 +75,19 @@ def build_database(
 
     if preset == "bold":
         db_dict = BOLD_CONFIG
+        header_processor = process_bold_header
     elif preset == "unite":
         db_dict = UNITE_CONFIG
+        header_processor = process_unite_header
     else:
-        db_dict = json.load(db_params)
+        with open(db_params, "r") as f:
+            db_dict = json.load(f)
+        header_processor = None
 
     database_creator = DatabaseCreator(
-        outdir=outdir,
+        outdir=Path(outdir),
         db_dict=db_dict,
+        header_processor=header_processor,
     )
     database_creator.create_marker_database(
         fasta=Path(fasta),
@@ -87,33 +104,53 @@ def build_database(
 
 @cli.command()
 @click.option(
-    "--platform",
-    type=str,
-    help="Input read platform. One of illumina, illumina_rnaseq, pacbio_hifi, oxford_nanopore.",
+    "--type",
+    "-x",
+    type=click.Choice(
+        [
+            "sr",
+            "short",
+            "illumina",
+            "rnaseq",
+            "pb",
+            "pacbio_hifi",
+            "ont",
+            "oxford_nanopore",
+            "contigs",
+        ]
+    ),
+    default="sr",
+    required=True,
+    help="Input data type, either a sequencing platform (to choose the right assembler), or pre-assembled contigs.",
 )
 @click.option(
     "--index",
+    "-i",
     type=click.Path(exists=True, dir_okay=False),
     required=True,
     help="Path to the marker database index JSON file.",
 )
 @click.option(
     "--outdir",
+    "-o",
     type=click.Path(exists=False),
     default=Path.cwd(),
 )
 @click.option(
     "--prefix",
+    "-p",
     type=str,
     help="Output file prefix.",
 )
 @click.option(
     "--nreads",
+    "-n",
     type=int,
     help="Number of reads to process. If unspecified, all reads are processed.",
 )
 @click.option(
     "--threads",
+    "-t",
     type=int,
     default=1,
     help="Number of threads to use for searching and assembly.",
@@ -124,29 +161,36 @@ def build_database(
     help="Optionally, the name of a single database within the index file to search with.",
 )
 @click.option(
-    "--cleanup",
+    "--cleanup/--no-cleanup",
     is_flag=True,
     default=True,
     help="Clean up temporary files after completion.",
 )
+@click.option(
+    "--include-lineage",
+    is_flag=True,
+    default=False,
+    help="Include lineage information in output.",
+)
 @click.argument(
-    "reads",
+    "input",
     type=click.Path(exists=True),
 )
-def search_reads(
-    platform: str,
+def search(
+    type: str,
     index: str,
     outdir: str,
     prefix: str,
     nreads: int,
+    include_lineage: bool,
     threads: int,
     db: str,
     cleanup: bool,
-    reads: str,
+    input: str,
 ):
-    """Search a set of short reads against a marker database.
+    """Search reads or contigs against a marker database.
 
-    READS: Path to the reads file (FASTX or CRAM) to search for barcodes in.
+    INPUT: Path to reads file (FASTX or CRAM) or contigs file (FASTA).
     """
     start_time = time.perf_counter()
 
@@ -160,13 +204,12 @@ def search_reads(
     pipeline = SearchPipeline(
         outdir=Path(outdir),
         threads=threads,
-        platform=platform,
-        cleanup=cleanup,
+        type=type,
         database_index=database_index,
+        include_lineage=include_lineage,
     )
-
     pipeline.run(
-        reads=Path(reads),
+        input=Path(input),
         n_reads=nreads,
         db_name=db,
         prefix=prefix,

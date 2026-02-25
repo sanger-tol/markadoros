@@ -16,14 +16,14 @@ class ReadPreprocessor:
         if not self.outdir.exists():
             self.outdir.mkdir(parents=True)
 
-    def _preprocess_reads_cram(self, input: Path, nreads: int = None) -> Path:
+    def _preprocess_reads_cram(self, input: Path, nreads: int | None = None) -> Path:
         """
         Read a CRAM file, and write out nreads reads to an interleaved FASTQ file.
         """
         count = 0
         outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
 
-        cram = pysam.AlignmentFile(input, "rc", check_sq=False, require_index=True)
+        cram = pysam.AlignmentFile(str(input), "rc", check_sq=False, require_index=True)
         with gzip.open(outfile, "wt") as f:
             for read in cram.fetch("."):
                 count += 1
@@ -34,21 +34,24 @@ class ReadPreprocessor:
                 f.write(f"@{read.query_name}{name_suffix}\n")
                 f.write(f"{read.query_sequence}\n")
                 f.write("+\n")
-                f.write(f"{''.join(chr(q + 33) for q in read.query_qualities)}\n")
+                if read.query_qualities is not None:
+                    f.write(f"{''.join(chr(q + 33) for q in read.query_qualities)}\n")
+                else:
+                    f.write("+\n")
 
         cram.close()
 
         return outfile
 
-    def _preprocess_reads_fastx(self, input: Path, nreads: int = None):
+    def _preprocess_reads_fastx(self, input: Path, nreads: int | None = None):
         """
         Read a FastQ file and write out the first N reads
         """
         outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
 
-        with pysam.FastxFile(input) as fin, gzip.open(outfile, mode="wt") as fout:
+        with pysam.FastxFile(str(input)) as fin, gzip.open(outfile, mode="wt") as fout:
             for i, entry in enumerate(fin):
-                if i > nreads:
+                if nreads is not None and i >= nreads:
                     break
 
                 fout.write(str(entry) + "\n")
@@ -58,7 +61,7 @@ class ReadPreprocessor:
     def preprocess_reads(
         self,
         input_file: Path,
-        n_reads: int = None,
+        n_reads: int | None = None,
     ) -> Path:
         """
         Get a subsample of reads and build an MMSeqs2 database from them

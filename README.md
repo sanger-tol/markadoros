@@ -61,42 +61,55 @@ less results.marker.result.tsv
 
 ## Detailed Usage
 
-### Database Preparation
+### Database preparation
 
-Use the `build-database` command to prepare marker gene sequences for searching:
+Use the `database` command to prepare marker gene sequences for searching:
 
 ```bash
-markadoros build-database --preset bold --outdir db/ /path/to/bold/release.fasta.gz
+markadoros database --preset bold --outdir db/ /path/to/bold/release.fasta.gz
 ```
 
-**Available presets:**
+You can choose a preset to process some pre-defined input FASTA releases correctly. Currently,
+there are two supported presets:
 
-- `bold` - [BOLD Systems](https://www.boldsystems.org/) releases
-- `unite` - [UNITE](https://unite.ut.ee/) ITS database
+- `bold` - [BOLD Systems](https://www.boldsystems.org/) [general FASTA release](https://bench.boldsystems.org/index.php/datapackages/Latest)
+- `unite` - [UNITE](https://unite.ut.ee/) [general FASTA release](https://unite.ut.ee/repository.php)
 
-**Custom parameters:**
+If your FASTA release does not conform to the above, you can build a custom database. You will
+need to create a params JSON file for your database (see below), and the input FASTA headers
+must be of the format:
+
+```
+><unique_id>|<marker>|<taxon_name>|<lineage or null>
+```
+
+You can then process the input as follows:
 
 ```bash
 markadoros build-database --db-params params.json --outdir db/ sequences.fasta
 ```
 
-The output includes:
+The output of DB preparation includes:
+
 - `db.json` - Index of available databases and their parameters
-- `<database_name>/db` - MMSeqs2 database files
+- `<database_name>/db*` - MMSeqs2 database files
 
-### Searching Reads
+If you build a second database pointing to the same output directory, the existing index file
+will be updated to include the new index.
 
-Use the `search-reads` command to identify barcode genes:
+### Searching for barcodes 
+
+Use the `search` command to identify barcode genes in a set of reads or a set of contigs:
 
 ```bash
-markadoros search-reads --index db/db.json reads.fq.gz
+markadoros search --index db/db.json reads.fq.gz
 ```
 
 **Options:**
 - `--db <name>` - Search specific database (default: all)
 - `--nreads <N>` - Limit to first N reads
 - `--prefix <name>` - Output file prefix (default: input filename)
-- `--platform illumina|illumina_rnaseq|pacbio_hifi|pb|oxford_nanopore|ont` - sequencing platform of input reads
+- `--type illumina|illumina_rnaseq|pacbio_hifi|pb|oxford_nanopore|ont|contigs` - input type
 
 **Output files:**
 - `<prefix>.marker.contigs.fa` - Assembled marker gene sequences
@@ -110,12 +123,9 @@ Create a custom `params.json` for your marker genes:
 {
     "parameters": {
         "deduplicate": true,
-        "seq_id_regex": "^([^|]+)",
-        "marker_id_regex": "^[^|]+\\|([^|]+)\\|",
-        "taxon_id_regex": "\\|[^|]*?([^,None][^,]*)(?:,None)*$"
     },
     "databases": {
-        "MY_MARKER": {
+        "MY_MARKER_DATABASE": {
             "marker": "COI-5P",
             "min_length": 200,
             "min_seq_id": 0.96,
@@ -127,9 +137,6 @@ Create a custom `params.json` for your marker genes:
 
 **Parameter descriptions:**
 - `deduplicate` - Remove duplicate sequences
-- `seq_id_regex` - Extract sequence identifier from header (must have capture group)
-- `marker_id_regex` - Extract marker name (can be null for single-marker databases)
-- `taxon_id_regex` - Extract taxonomic classification
 
 **Database options:**
 - `marker` - Marker gene name

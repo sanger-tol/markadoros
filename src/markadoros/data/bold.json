@@ -1,9 +1,6 @@
 {
     "parameters": {
-        "deduplicate": true,
-        "seq_id_regex": "^([^|]+)",
-        "marker_id_regex": "^[^|]+\\|([^|]+)\\|",
-        "taxon_id_regex": "^[^|]*\\|[^|]*\\|[^|]*\\|([^|]*)$"
+        "deduplicate": true
     },
     "databases": {
         "BOLD_COI": {

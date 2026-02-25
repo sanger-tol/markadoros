@@ -1,5 +1,6 @@
 import shutil
 from pathlib import Path
+from typing import Callable
 
 import click
 
@@ -11,7 +12,12 @@ from markadoros.marker_database_builder import MarkerDatabaseBuilder
 class DatabaseCreator:
     """Orchestrates the creation of marker databases from FASTA files."""
 
-    def __init__(self, outdir: Path, db_dict: dict) -> None:
+    def __init__(
+        self,
+        outdir: Path,
+        db_dict: dict,
+        header_processor: Callable[[str], tuple[str, str]] | None = None,
+    ) -> None:
         # Stage output directory
         self._outdir = Path(outdir)
         if not self._outdir.exists():
@@ -36,11 +42,9 @@ class DatabaseCreator:
 
         # Initialize FastaProcessor
         self._fasta_processor = FASTAProcessor(
-            seq_id_regex=parameters.get("seq_id_regex"),
-            marker_id_regex=parameters.get("marker_id_regex"),
-            taxon_id_regex=parameters.get("taxon_id_regex"),
             databases=databases,
             deduplicate=parameters.get("deduplicate", False),
+            header_processor=header_processor,
             tmpdir=self._tmpdir,
         )
 
@@ -55,7 +59,7 @@ class DatabaseCreator:
 
         # Build MMSeqs database for each non-empty FASTA output processed
         for database, params in processed_dict.items():
-            db_path = self._db_builder.build(database, params, fasta)
+            db_path = self._db_builder.build(database, params)
 
             # Add the database path and build FASTA to the db dict, and
             # remove the temporary FASTA file from it

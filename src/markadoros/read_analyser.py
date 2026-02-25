@@ -11,7 +11,7 @@ from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import SearchConfig as MMSeqsSearchConfig
 from pymmseqs.parsers import SearchParser as MMSeqsSearchParser
 
-from markadoros.assembler import AssemblerRunner
+from markadoros.assembler_runners import AssemblerRunner
 
 
 class ReadAnalyser:
@@ -44,7 +44,7 @@ class ReadAnalyser:
 
         reads_extracted = 0
         with (
-            pysam.FastxFile(input_reads) as fin,
+            pysam.FastxFile(str(input_reads)) as fin,
             gzip.open(output_path, mode="wt") as fout,
         ):
             for read in fin:
@@ -76,13 +76,13 @@ class ReadAnalyser:
         self,
         query_db: Path,
         target_db: Path,
-        alignment_db: str,
+        alignment_db: Path,
         tmp_dir: Path,
         s: float = 5.7,
         max_seqs: int = 300,
         alignment_mode: int = 2,
         min_seq_id: float = 0,
-        min_aln_len: float = 0,
+        min_aln_len: int = 0,
     ) -> MMSeqsSearchParser:
         """Search sequences against database."""
         with redirect_stdout(io.StringIO()):
@@ -130,7 +130,7 @@ class ReadAnalyser:
 
         return aligned_reads
 
-    def _assemble_reads(self, aligned_reads: Path, marker: str) -> Path:
+    def _assemble_reads(self, aligned_reads: Path, marker: str) -> Path | None:
         """Assemble filtered reads into contigs"""
         click.echo("Assembling extracted reads with SPAdes... ")
         contigs = self.assembler.assemble(
@@ -189,7 +189,7 @@ class ReadAnalyser:
         db: Path,
         min_seq_id: float = 0.96,
         min_aln_len: int = 400,
-    ) -> pd.DataFrame:
+    ) -> pd.DataFrame | None:
         """Run complete analysis pipeline."""
         aligned_reads = self._filter_reads(input_reads, marker, db)
 

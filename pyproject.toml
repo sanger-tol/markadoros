@@ -1,6 +1,6 @@
 [project]
 name = "markadoros"
-version = "0.1.0"
+version = "0.9.0"
 description = "Markadoros is a tool for the identification and assembly of barcode genes in raw sequencing data."
 readme = "README.md"
 authors = [

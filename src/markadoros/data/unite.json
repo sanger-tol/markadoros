@@ -1,9 +1,6 @@
 {
     "parameters": {
-        "deduplicate": false,
-        "seq_id_regex": "[^|]*\\|[^|]*\\|([^|]+)",
-        "marker_id_regex": null,
-        "taxon_id_regex": "^([^|]+)"
+        "deduplicate": false
     },
     "databases": {
         "UNITE_ITS": {

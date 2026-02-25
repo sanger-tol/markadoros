@@ -35,12 +35,12 @@ class MarkerDatabaseBuilder:
             )
             index_config.run()
 
-    def build(self, database: str, params: dict, fasta: Path) -> Path:
+    def build(self, database: str, params: dict) -> Path:
         """Build and index an MMSeqs2 database."""
         db_path = self._outdir / database / "db"
 
         click.echo(f"Building MMSeqs2 database for {database}... ")
-        self._create_db(db_path, params.get("processed_fasta"))
+        self._create_db(db_path, params["processed_fasta"])
 
         click.echo(f"Indexing MMSeqs2 database for {database}... ")
         self._index_db(db_path)
