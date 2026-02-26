@@ -1,11 +1,12 @@
-import gzip
 import io
 import shutil
 from contextlib import redirect_stdout
+from math import floor
 from pathlib import Path
 
-import click
+import bgzip
 import pysam
+from loguru import logger
 from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import SearchConfig as MMSeqsSearchConfig
 from pymmseqs.parsers import SearchParser as MMSeqsSearchParser
@@ -30,53 +31,6 @@ class ReadAssembler:
         self.prefix = prefix
         self.assembler = assembler
 
-    def _create_db(self, fasta: Path, outdb: Path) -> Path:
-        """Create an MMSeqs2 database from a FASTA file."""
-        with redirect_stdout(io.StringIO()):
-            db_config = CreateMMSeqsDBConfig(
-                fasta_file=fasta.resolve(),
-                sequence_db=outdb.resolve(),
-                dbtype=2,
-                v=1,
-            )
-            db_config.run()
-
-        return outdb.resolve()
-
-    def _search(
-        self,
-        query_db: Path,
-        target_db: Path,
-        alignment_db: Path,
-        tmp_dir: Path,
-        s: float = 5.7,
-        max_seqs: int = 300,
-        max_accept: int = 100,
-        alignment_mode: int = 2,
-        min_seq_id: float = 0,
-        min_aln_len: int = 0,
-    ) -> MMSeqsSearchParser:
-        """Search sequences against database."""
-        with redirect_stdout(io.StringIO()):
-            search = MMSeqsSearchConfig(
-                query_db=query_db.resolve(),
-                target_db=target_db.resolve(),
-                alignment_db=alignment_db.resolve(),
-                tmp_dir=tmp_dir.resolve(),
-                search_type=3,
-                v=1,
-                threads=self.threads,
-                s=s,
-                max_seqs=max_seqs,
-                max_accept=max_accept,
-                alignment_mode=alignment_mode,
-                min_seq_id=min_seq_id,
-                min_aln_len=min_aln_len,
-            )
-            search.run()
-
-        return MMSeqsSearchParser(search)
-
     def _extract_reads(
         self, search_result: MMSeqsSearchParser, input_reads: Path, output_path: Path
     ) -> Path | None:
@@ -87,12 +41,15 @@ class ReadAssembler:
         reads_extracted = 0
         with (
             pysam.FastxFile(str(input_reads)) as fin,
-            gzip.open(output_path, mode="wt") as fout,
+            open(output_path, mode="wb") as fout,
         ):
-            for read in fin:
-                if read.name in aligned_reads:
-                    reads_extracted += 1
-                    fout.write(str(read) + "\n")
+            with bgzip.BGZipWriter(fout, num_threads=self.threads):
+                for read in fin:
+                    if read.name in aligned_reads:
+                        reads_extracted += 1
+                        fout.write((str(read) + "\n").encode("utf-8"))
+
+        logger.info(f"Extracted {reads_extracted} reads!")
 
         if reads_extracted == 0:
             return None
@@ -101,21 +58,46 @@ class ReadAssembler:
 
     def _filter_reads(self, input_reads: Path, marker: str, db: Path) -> Path | None:
         """Pre-filter reads against database and extract aligned reads."""
-        input_db = self._create_db(input_reads, self.tmpdir / "input" / "db")
+        input_db_path = self.tmpdir / "input" / "db"
+        input_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        click.echo(f"Searching reads against {marker}...")
-        reads_search = self._search(
-            query_db=input_db,
-            target_db=db,
-            alignment_db=self.tmpdir / marker / "search_reads" / "db",
-            tmp_dir=self.tmpdir / marker / "mmseqs_tmp",
-            s=1,
-            max_seqs=10,
-            max_accept=1,
-            alignment_mode=1,
-        )
+        with redirect_stdout(io.StringIO()):
+            db_config = CreateMMSeqsDBConfig(
+                fasta_file=input_reads.resolve(),
+                sequence_db=input_db_path.resolve(),
+                dbtype=2,
+                v=3,
+            )
+            db_config.run()
 
-        click.echo("Extracting aligned reads...")
+        logger.info(f"Searching reads against {marker}...")
+
+        search_result_db = self.tmpdir / marker / "search_reads" / "db"
+        search_result_db.parent.mkdir(parents=True, exist_ok=True)
+        tmp_dir = self.tmpdir / marker / "mmseqs_tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        with redirect_stdout(io.StringIO()):
+            search_config = MMSeqsSearchConfig(
+                query_db=input_db_path.resolve(),
+                target_db=db.resolve(),
+                alignment_db=search_result_db.resolve(),
+                tmp_dir=tmp_dir.resolve(),
+                search_type=3,
+                v=3,
+                threads=self.threads,
+                s=1,
+                max_seqs=300,
+                alignment_mode=1,
+                min_seq_id=0,
+                min_aln_len=0,
+                exact_kmer_matching=True,
+            )
+            search_config.run()
+
+        reads_search = MMSeqsSearchParser(search_config)
+
+        logger.info("Extracting aligned reads...")
         aligned_reads = self._extract_reads(
             reads_search,
             input_reads,
@@ -126,7 +108,7 @@ class ReadAssembler:
 
     def _assemble_reads(self, aligned_reads: Path, marker: str) -> Path | None:
         """Assemble filtered reads into contigs."""
-        click.echo(f"Assembling reads for {marker}...")
+        logger.info(f"Assembling reads for {marker}...")
         contigs = self.assembler.assemble(
             aligned_reads,
             self.tmpdir / marker / "assembly.out",
@@ -140,6 +122,36 @@ class ReadAssembler:
         shutil.copy2(contigs, output_contigs)
 
         return output_contigs
+
+    def _get_assembly_stats(self, contigs: Path) -> dict[str, int]:
+        """Calculate assembly statistics from contigs.
+
+        Args:
+            contigs: Path to contigs FASTA file
+
+        Returns:
+            Dictionary with assembly statistics (n, size, n50)
+        """
+        count = 0
+        lengths = []
+        with pysam.FastxFile(str(contigs)) as asm:
+            for record in asm:
+                count += 1
+                if record.sequence is not None:
+                    lengths.append(len(record.sequence))
+
+        asm_size = sum(lengths)
+
+        lengths.sort(reverse=True)
+        cumulative_sum = 0
+        n50 = 0
+        for length in lengths:
+            cumulative_sum += length
+            if cumulative_sum >= floor(asm_size / 2):
+                n50 = length
+                break
+
+        return {"n": count, "size": asm_size, "n50": n50, "longest": max(lengths)}
 
     def assemble(
         self,
@@ -161,14 +173,19 @@ class ReadAssembler:
         aligned_reads = self._filter_reads(input_reads, marker, db)
 
         if aligned_reads is None:
-            click.echo(f"No reads aligned to {marker}", err=True)
+            logger.error(f"No reads aligned to {marker}")
             return None
 
         # Assemble filtered reads
         assembled_contigs = self._assemble_reads(aligned_reads, marker)
 
         if assembled_contigs is None:
-            click.echo(f"Failed to assemble contigs for {marker}", err=True)
+            logger.error(f"Failed to assemble contigs for {marker}")
             return None
+
+        contig_stats = self._get_assembly_stats(assembled_contigs)
+        logger.info(
+            f"Assembled {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
+        )
 
         return assembled_contigs

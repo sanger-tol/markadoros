@@ -2,7 +2,7 @@ import io
 from contextlib import redirect_stdout
 from pathlib import Path
 
-import click
+from loguru import logger
 from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import CreateIndexConfig as MMSeqsCreateIndexConfig
 
@@ -39,10 +39,10 @@ class MarkerDatabaseBuilder:
         """Build and index an MMSeqs2 database."""
         db_path = self._outdir / database / "db"
 
-        click.echo(f"Building MMSeqs2 database for {database}... ")
+        logger.info(f"Building MMSeqs2 database for {database}... ")
         self._create_db(db_path, params["processed_fasta"])
 
-        click.echo(f"Indexing MMSeqs2 database for {database}... ")
+        logger.info(f"Indexing MMSeqs2 database for {database}... ")
         self._index_db(db_path)
 
         return db_path

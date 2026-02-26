@@ -3,14 +3,14 @@ import hashlib
 from pathlib import Path
 from typing import Callable
 
-import click
 import pysam
 from Bio.Seq import Seq
+from loguru import logger
 
 from markadoros.header_processor import process_generic_header
 
 
-class FASTAProcessor:
+class DatabaseFASTAProcessor:
     """Handles FASTA file reading, header parsing, and deduplication."""
 
     def __init__(
@@ -94,7 +94,7 @@ class FASTAProcessor:
     def process(self, fasta: Path) -> dict:
         """Process a FASTA file, splitting by markers with optional deduplication."""
         markers = [info.get("marker") for info in self._databases.values()]
-        click.echo(f"Splitting {fasta.name} by markers: {', '.join(markers)}")
+        logger.info(f"Splitting {fasta.name} by markers: {', '.join(markers)}")
 
         # Open output files for each database
         output_handles = {
@@ -116,7 +116,7 @@ class FASTAProcessor:
                 for record in fh:
                     seq_count += 1
                     if seq_count % 500000 == 0:
-                        click.echo(f"Processed {seq_count:,} sequences", err=True)
+                        logger.info(f"Processed {seq_count:,} sequences")
 
                     header = self._get_header(record)
                     marker, output_header = self.header_processor(header)
@@ -158,7 +158,7 @@ class FASTAProcessor:
         # Log databases with no records
         for db, count in record_counts.items():
             if count == 0:
-                click.echo(f"No records found for {db}")
+                logger.warning(f"No records found for {db}")
 
         # Build output dictionary with only databases that have records
         return {

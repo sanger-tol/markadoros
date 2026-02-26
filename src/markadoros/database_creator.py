@@ -2,10 +2,10 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
-import click
+from loguru import logger
 
+from markadoros.database_fasta_processor import DatabaseFASTAProcessor
 from markadoros.database_index import DatabaseIndex
-from markadoros.fasta_processor import FASTAProcessor
 from markadoros.marker_database_builder import MarkerDatabaseBuilder
 
 
@@ -41,7 +41,7 @@ class DatabaseCreator:
         self.deduplicated = parameters.get("deduplicate", False)
 
         # Initialize FastaProcessor
-        self._fasta_processor = FASTAProcessor(
+        self._fasta_processor = DatabaseFASTAProcessor(
             databases=databases,
             deduplicate=parameters.get("deduplicate", False),
             header_processor=header_processor,
@@ -65,7 +65,7 @@ class DatabaseCreator:
             # remove the temporary FASTA file from it
             db_entry = {
                 **params,
-                "db": str(db_path),
+                "db": str(db_path.resolve()),
                 "built_from": str(fasta.resolve()),
                 "deduplicated": self.deduplicated,
             }
@@ -74,7 +74,7 @@ class DatabaseCreator:
             # Add the database entry to the index
             self._db_index.add_entry(database, db_entry)
 
-        click.echo(f"Created {len(processed_dict)} databases! Exiting.")
+        logger.info(f"Created {len(processed_dict)} databases! Exiting.")
 
     def cleanup(self) -> None:
         """Remove temporary files."""

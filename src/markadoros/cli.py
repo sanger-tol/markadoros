@@ -1,9 +1,11 @@
 import json
+import sys
 import time
 from datetime import timedelta
 from pathlib import Path
 
 import click
+from loguru import logger
 
 from markadoros.data import BOLD_CONFIG, UNITE_CONFIG
 from markadoros.database_creator import DatabaseCreator
@@ -12,7 +14,7 @@ from markadoros.header_processor import (
     process_unite_header,
 )
 from markadoros.search_pipeline import SearchPipeline
-from markadoros.utils import validate_and_load_index
+from markadoros.utils import set_mmseqs_path, validate_and_load_index
 
 
 @click.group()
@@ -21,7 +23,13 @@ from markadoros.utils import validate_and_load_index
     message="%(prog)s %(version)s",
 )
 def cli():
-    pass
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        format="markadoros | [{time:HH:mm:ss}] | {level} -  {message}",
+        level="INFO",
+    )
+    set_mmseqs_path()
 
 
 @cli.command()
@@ -73,6 +81,11 @@ def database(
     """
     start_time = time.perf_counter()
 
+    logger.add(
+        str(".".join([outdir, fasta, "log"])),
+        level="INFO",
+    )
+
     if preset == "bold":
         db_dict = BOLD_CONFIG
         header_processor = process_bold_header
@@ -96,7 +109,7 @@ def database(
     elapsed = time.perf_counter() - start_time
     formatted_time = str(timedelta(seconds=int(elapsed)))
 
-    click.echo(f"Finished! Database creation completed in {formatted_time}.")
+    logger.info(f"Finished! Database creation completed in {formatted_time}.")
 
     if cleanup:
         database_creator.cleanup()
@@ -134,7 +147,7 @@ def database(
     "--outdir",
     "-o",
     type=click.Path(exists=False),
-    default=Path.cwd(),
+    default=str(Path.cwd().resolve()),
 )
 @click.option(
     "--prefix",
@@ -194,6 +207,11 @@ def search(
     """
     start_time = time.perf_counter()
 
+    logger.add(
+        str(".".join([outdir, prefix, "log"])),
+        level="INFO",
+    )
+
     # Load and validate database
     try:
         database_index = validate_and_load_index(Path(index))
@@ -218,7 +236,7 @@ def search(
     elapsed = time.perf_counter() - start_time
     formatted_time = str(timedelta(seconds=int(elapsed)))
 
-    click.echo(f"Finished! Sequences searched in {formatted_time}.")
+    logger.info(f"Finished! Sequences searched in {formatted_time}.")
 
     if cleanup:
         pipeline.cleanup()

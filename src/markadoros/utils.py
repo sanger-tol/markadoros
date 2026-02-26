@@ -1,7 +1,11 @@
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 from jsonschema import ValidationError, validate
+from loguru import logger
 
 
 def get_simple_name(input: Path) -> str:
@@ -58,3 +62,70 @@ def validate_and_load_index(database: Path) -> dict:
         ) from e
 
     return data
+
+
+def _check_mmseqs_binary(mmseqs_path: str) -> None:
+    """Check that mmseqs2 binary exists and is executable.
+
+    Args:
+        mmseqs_path: Path to the mmseqs2 binary
+
+    Raises:
+        RuntimeError: If binary cannot be executed
+    """
+    try:
+        result = subprocess.run(
+            [mmseqs_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"mmseqs2 at {mmseqs_path} returned exit code {result.returncode}"
+            )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"mmseqs2 binary check timed out at {mmseqs_path}")
+    except FileNotFoundError:
+        raise RuntimeError(f"mmseqs2 binary not found at {mmseqs_path}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to check mmseqs2 binary at {mmseqs_path}: {e}")
+
+
+def set_mmseqs_path() -> None:
+    """
+    Attempt to find mmseqs2 binary on PATH and set MMSEQS2_PATH environment variable.
+
+    Raises RuntimeError if mmseqs2 cannot be found or is not executable.
+    """
+    # First check if MMSEQS2_PATH is already set
+    existing_path = os.getenv("MMSEQS2_PATH")
+
+    if existing_path and os.path.exists(existing_path):
+        try:
+            _check_mmseqs_binary(existing_path)
+            logger.info(f"Using pre-configured mmseqs2 at {existing_path}")
+        except RuntimeError as e:
+            logger.error(f"Error with pre-configured mmseqs2: {e}")
+            raise
+        return
+
+    # Try to find mmseqs2 on PATH
+    mmseqs_binary = shutil.which("mmseqs")
+
+    if mmseqs_binary:
+        try:
+            _check_mmseqs_binary(mmseqs_binary)
+            # Set the environment variable for pymmseqs to use
+            os.environ["MMSEQS2_PATH"] = mmseqs_binary
+            logger.info(f"Found mmseqs2 at {mmseqs_binary}")
+        except RuntimeError as e:
+            logger.error(f"Error checking mmseqs2 binary: {e}")
+            raise
+        return
+
+    # Fallback: raise error if we couldn't find mmseqs2
+    raise RuntimeError(
+        "Could not find mmseqs2 binary on PATH or MMSEQS2_PATH. "
+        "Please install mmseqs2 or set the MMSEQS2_PATH environment variable."
+    )

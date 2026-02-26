@@ -3,7 +3,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import click
+from loguru import logger
 
 
 class AssemblerRunner(ABC):
@@ -55,17 +55,15 @@ class AssemblerRunner(ABC):
         except FileNotFoundError:
             raise FileNotFoundError(f"{self.__class__.__name__} is not installed!")
         except subprocess.CalledProcessError as e:
-            click.echo(
-                f"{self.__class__.__name__} failed with exit code {e.returncode}. Check {log_file} for details.",
-                err=True,
+            logger.error(
+                f"{self.__class__.__name__} failed with exit code {e.returncode}. Check {log_file} for details."
             )
             return None
 
         output_file = self._get_output_file(outdir)
         if not output_file.exists():
-            click.echo(
-                f"{self.__class__.__name__} did not produce expected output. Check {log_file} for details.",
-                err=True,
+            logger.error(
+                f"{self.__class__.__name__} did not produce expected output. Check {log_file} for details."
             )
             return None
 

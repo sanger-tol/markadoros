@@ -3,6 +3,7 @@ from pathlib import Path
 
 import click
 import pandas as pd
+from loguru import logger
 
 from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
 from markadoros.contig_searcher import ContigSearcher
@@ -55,14 +56,14 @@ class SearchPipeline:
 
         out = result.head(1).reset_index()
         for _, row in out.iterrows():
-            click.echo(f"query: {row['query']}")
+            click.echo("")
+            click.echo(f"contig: {row['target']}")
             click.echo(f"match_id: {row['seq_id']}")
             click.echo(f"match_taxon: {row['taxon']}")
             click.echo(f"fident: {row['fident']}")
             click.echo(f"alnlen: {row['alnlen']}")
             if "coverage" in out.columns:
                 click.echo(f"coverage: {row['coverage']}x")
-            click.echo()
 
     def _filter_databases(self, db_name: str | None = None) -> dict:
         """Filter databases to search."""
@@ -206,7 +207,7 @@ class SearchPipeline:
                 )
 
             if result is None or result.empty:
-                click.echo(f"No results found for {db_name}!.")
+                logger.warning(f"No results found for {db_name}!.")
                 continue
 
             # Process results (extract coverage, sort, save)
@@ -221,8 +222,7 @@ class SearchPipeline:
 
         # Display results
         for db_name, result in results.items():
-            click.echo()
-            click.echo(f"Top result for {db_name}:")
+            logger.info(f"Top result for {db_name}:")
             self._print_result_summary(result)
 
         return results

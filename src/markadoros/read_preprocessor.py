@@ -1,8 +1,8 @@
-import gzip
 from pathlib import Path
 
-import click
+import bgzip
 import pysam
+from loguru import logger
 
 from markadoros.utils import get_simple_name
 
@@ -11,10 +11,13 @@ class ReadPreprocessor:
     def __init__(
         self,
         outdir: Path,
+        threads: int = 1,
     ):
         self.outdir = Path(outdir)
         if not self.outdir.exists():
             self.outdir.mkdir(parents=True)
+
+        self.threads = threads
 
     def _preprocess_reads_cram(self, input: Path, nreads: int | None = None) -> Path:
         """
@@ -24,20 +27,25 @@ class ReadPreprocessor:
         outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
 
         cram = pysam.AlignmentFile(str(input), "rc", check_sq=False, require_index=True)
-        with gzip.open(outfile, "wt") as f:
-            for read in cram.fetch("."):
-                count += 1
-                if nreads is not None and count > nreads:
-                    break
+        with open(outfile, "wb") as f:
+            with bgzip.BGZipWriter(f, num_threads=self.threads):
+                for read in cram.fetch("."):
+                    count += 1
+                    if nreads is not None and count > nreads:
+                        break
 
-                name_suffix = "/1" if read.is_read1 else "/2"
-                f.write(f"@{read.query_name}{name_suffix}\n")
-                f.write(f"{read.query_sequence}\n")
-                f.write("+\n")
-                if read.query_qualities is not None:
-                    f.write(f"{''.join(chr(q + 33) for q in read.query_qualities)}\n")
-                else:
-                    f.write("+\n")
+                    name_suffix = "/1" if read.is_read1 else "/2"
+                    f.write(f"@{read.query_name}{name_suffix}\n".encode("utf-8"))
+                    f.write(f"{read.query_sequence}\n".encode("utf-8"))
+                    f.write("+\n".encode("utf-8"))
+                    if read.query_qualities is not None:
+                        f.write(
+                            f"{''.join(chr(q + 33) for q in read.query_qualities)}\n".encode(
+                                "utf-8"
+                            )
+                        )
+                    else:
+                        f.write("+\n".encode("utf-8"))
 
         cram.close()
 
@@ -49,12 +57,13 @@ class ReadPreprocessor:
         """
         outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
 
-        with pysam.FastxFile(str(input)) as fin, gzip.open(outfile, mode="wt") as fout:
-            for i, entry in enumerate(fin):
-                if nreads is not None and i >= nreads:
-                    break
+        with pysam.FastxFile(str(input)) as fin, open(outfile, mode="wb") as fout:
+            with bgzip.BGZipWriter(fout, num_threads=self.threads):
+                for i, entry in enumerate(fin):
+                    if nreads is not None and i >= nreads:
+                        break
 
-                fout.write(str(entry) + "\n")
+                    fout.write(str(entry).encode("utf-8"))
 
         return outfile
 
@@ -83,7 +92,7 @@ class ReadPreprocessor:
         # Print appropriate status message
         action = "Converting" if file_key == ".cram" else "Extracting"
         read_limit = "all" if n_reads is None else f"first {n_reads}"
-        click.echo(f"{action} {read_limit} reads from {input_file.name}")
+        logger.info(f"{action} {read_limit} reads from {input_file.name}")
 
         if file_key == ".cram":
             return self._preprocess_reads_cram(input_file, n_reads)
