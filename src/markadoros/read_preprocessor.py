@@ -28,24 +28,24 @@ class ReadPreprocessor:
 
         cram = pysam.AlignmentFile(str(input), "rc", check_sq=False, require_index=True)
         with open(outfile, "wb") as f:
-            with bgzip.BGZipWriter(f, num_threads=self.threads):
+            with bgzip.BGZipWriter(f, num_threads=self.threads) as writer:
                 for read in cram.fetch("."):
                     count += 1
                     if nreads is not None and count > nreads:
                         break
 
                     name_suffix = "/1" if read.is_read1 else "/2"
-                    f.write(f"@{read.query_name}{name_suffix}\n".encode("utf-8"))
-                    f.write(f"{read.query_sequence}\n".encode("utf-8"))
-                    f.write("+\n".encode("utf-8"))
+                    writer.write(f"@{read.query_name}{name_suffix}\n".encode("utf-8"))
+                    writer.write(f"{read.query_sequence}\n".encode("utf-8"))
+                    writer.write("+\n".encode("utf-8"))
                     if read.query_qualities is not None:
-                        f.write(
+                        writer.write(
                             f"{''.join(chr(q + 33) for q in read.query_qualities)}\n".encode(
                                 "utf-8"
                             )
                         )
                     else:
-                        f.write("+\n".encode("utf-8"))
+                        writer.write("+\n".encode("utf-8"))
 
         cram.close()
 
@@ -58,12 +58,12 @@ class ReadPreprocessor:
         outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
 
         with pysam.FastxFile(str(input)) as fin, open(outfile, mode="wb") as fout:
-            with bgzip.BGZipWriter(fout, num_threads=self.threads):
+            with bgzip.BGZipWriter(fout, num_threads=self.threads) as writer:
                 for i, entry in enumerate(fin):
                     if nreads is not None and i >= nreads:
                         break
 
-                    fout.write(str(entry).encode("utf-8"))
+                    writer.write((str(entry) + "\n").encode("utf-8"))
 
         return outfile
 

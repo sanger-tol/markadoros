@@ -20,7 +20,7 @@ def process_unite_header(header: str) -> tuple[str, str]:
     if not len(split_header) == 5 or ";" not in split_header[4]:
         raise ValueError(f"Invalid UNITE header: {header}")
 
-    seq_id = split_header[1] + ";" + split_header[2]
+    seq_id = split_header[1] + "/" + split_header[2]
     marker = "ITS"
     lineage = split_header[4]
     taxon = split_header[0]

@@ -57,13 +57,14 @@ class SearchPipeline:
         out = result.head(1).reset_index()
         for _, row in out.iterrows():
             click.echo("")
-            click.echo(f"contig: {row['target']}")
-            click.echo(f"match_id: {row['seq_id']}")
-            click.echo(f"match_taxon: {row['taxon']}")
-            click.echo(f"fident: {row['fident']}")
-            click.echo(f"alnlen: {row['alnlen']}")
+            click.echo(f"\tcontig: {row['target']}")
+            click.echo(f"\tmatch_id: {row['seq_id']}")
+            click.echo(f"\tmatch_taxon: {row['taxon']}")
+            click.echo(f"\tfident: {row['fident']}")
+            click.echo(f"\talnlen: {row['alnlen']}")
             if "coverage" in out.columns:
-                click.echo(f"coverage: {row['coverage']}x")
+                click.echo(f"\tcoverage: {row['coverage']}x")
+            click.echo("")
 
     def _filter_databases(self, db_name: str | None = None) -> dict:
         """Filter databases to search."""
@@ -161,13 +162,13 @@ class SearchPipeline:
         """
         prefix = prefix or input.stem
 
-        # Preprocess reads
-        preprocessor = ReadPreprocessor(self.outdir / "tmp")
-        subsampled_reads = preprocessor.preprocess_reads(input, n_reads)
-
         read_assembler = None
+        subsampled_reads = None
+        # Preprocess reads and set up assembly pipeline
         if self.type != "contigs" and self.assembler is not None:
-            # Assemble reads to contigs
+            preprocessor = ReadPreprocessor(self.outdir / "tmp")
+            subsampled_reads = preprocessor.preprocess_reads(input, n_reads)
+
             read_assembler = ReadAssembler(
                 outdir=self.outdir,
                 tmpdir=self.outdir / "tmp",
@@ -182,7 +183,7 @@ class SearchPipeline:
         # Run analysis for each database
         results = {}
         for db_name, params in databases.items():
-            if read_assembler is not None:
+            if read_assembler is not None and subsampled_reads is not None:
                 contigs = read_assembler.assemble(
                     input_reads=subsampled_reads,
                     marker=params.get("marker"),
@@ -205,6 +206,8 @@ class SearchPipeline:
                     min_seq_id=params.get("min_seq_id"),
                     min_aln_len=params.get("min_aln_len"),
                 )
+            else:
+                result = None
 
             if result is None or result.empty:
                 logger.warning(f"No results found for {db_name}!.")

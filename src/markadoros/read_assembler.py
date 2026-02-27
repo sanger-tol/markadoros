@@ -43,11 +43,11 @@ class ReadAssembler:
             pysam.FastxFile(str(input_reads)) as fin,
             open(output_path, mode="wb") as fout,
         ):
-            with bgzip.BGZipWriter(fout, num_threads=self.threads):
+            with bgzip.BGZipWriter(fout, num_threads=self.threads) as writer:
                 for read in fin:
                     if read.name in aligned_reads:
                         reads_extracted += 1
-                        fout.write((str(read) + "\n").encode("utf-8"))
+                        writer.write((str(read) + "\n").encode("utf-8"))
 
         logger.info(f"Extracted {reads_extracted} reads!")
 
@@ -87,7 +87,8 @@ class ReadAssembler:
                 v=3,
                 threads=self.threads,
                 s=1,
-                max_seqs=300,
+                max_seqs=10,
+                max_accept=1,
                 alignment_mode=1,
                 min_seq_id=0,
                 min_aln_len=0,

@@ -40,7 +40,7 @@ class ContigSearcher:
         Returns:
             DataFrame with search results, or None if search failed
         """
-        logger.info(f"Searching contigs against {marker}...")
+        logger.info(f"Searching for {marker} hits in assembled contigs...")
 
         # Create database from contigs
         contigs_db = self.tmpdir / marker / "contigs" / "db"

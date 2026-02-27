@@ -26,7 +26,7 @@ def cli():
     logger.remove()
     logger.add(
         sys.stderr,
-        format="markadoros | [{time:HH:mm:ss}] | {level} -  {message}",
+        format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
         level="INFO",
     )
     set_mmseqs_path()
@@ -82,7 +82,7 @@ def database(
     start_time = time.perf_counter()
 
     logger.add(
-        str(".".join([outdir, fasta, "log"])),
+        str(Path(outdir).resolve() / "markadoros.database.log"),
         level="INFO",
     )
 
@@ -208,7 +208,7 @@ def search(
     start_time = time.perf_counter()
 
     logger.add(
-        str(".".join([outdir, prefix, "log"])),
+        str(Path(outdir).resolve() / f"{prefix}.log"),
         level="INFO",
     )
 
