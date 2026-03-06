@@ -62,6 +62,13 @@ class SearchPipeline:
 
         self.assembler = assembler
 
+    def _prepare_workspace(self) -> None:
+        """Prepare the workspace, cleaning up any leftover tmpdir from previous runs."""
+        tmpdir = self.outdir / "tmp"
+        if tmpdir.exists():
+            logger.warning(f"Cleaning up existing tmpdir from previous run: {tmpdir}")
+            shutil.rmtree(tmpdir)
+
     def _print_result_summary(self, result: pd.DataFrame) -> None:
         """Print a summary of the top search result."""
         if result.empty:
@@ -170,19 +177,19 @@ class SearchPipeline:
         for taxon in taxa_with_max.index:
             top_taxon_hit = result[result["taxon"] == taxon].iloc[0]
             top_taxa_dict[taxon] = {
-                "fident": top_taxon_hit["fident"],
-                "alnlen": top_taxon_hit["alnlen"],
-                "tstart": top_taxon_hit["tstart"],
-                "tend": top_taxon_hit["tend"],
-                "evalue": top_taxon_hit["evalue"],
-                "bits": top_taxon_hit["bits"],
+                "fident": float(top_taxon_hit["fident"]),
+                "alnlen": int(top_taxon_hit["alnlen"]),
+                "tstart": int(top_taxon_hit["tstart"]),
+                "tend": int(top_taxon_hit["tend"]),
+                "evalue": float(top_taxon_hit["evalue"]),
+                "bits": int(top_taxon_hit["bits"]),
             }
 
         ## Get the number of hits for the expected taxon
         expected_taxon_counts_in_result = None
         if self.expected_taxon:
-            expected_taxon_counts_in_result = found_taxon_counts.get(
-                self.expected_taxon, 0
+            expected_taxon_counts_in_result = int(
+                found_taxon_counts.get(self.expected_taxon, 0)
             )
             logger.info(
                 f"Found {expected_taxon_counts_in_result} results for {self.expected_taxon}!"
@@ -346,7 +353,7 @@ class SearchPipeline:
         """Save summary results to JSON file."""
         output_path = self.outdir / f"{prefix}.{marker}.summary.json"
         with open(output_path, "w") as f:
-            json.dump(summary, f)
+            json.dump(summary, f, indent=4)
 
     def _process_database(
         self,
@@ -444,6 +451,9 @@ class SearchPipeline:
         Returns:
             Dictionary mapping database names to result DataFrames
         """
+        # Prepare workspace (clean up any leftover tmpdir)
+        self._prepare_workspace()
+
         output_prefix = prefix or input.stem
 
         # Setup preprocessing and assembly if working with reads
