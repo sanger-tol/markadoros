@@ -206,13 +206,14 @@ class SearchPipeline:
         )
 
         summary = {
+            "n_contigs_with_hits": int(result["target"].nunique()),
             "expectation": expectation,
             "top_taxa_results": top_taxa_dict,
         }
 
         output = {
             "input": {
-                "file": str(input),
+                "file": str(input.resolve()),
                 "n_reads": n_reads if self.input_type != "contigs" else None,
                 "marker": marker,
                 "database": database,

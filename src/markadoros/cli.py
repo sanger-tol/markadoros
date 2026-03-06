@@ -214,12 +214,6 @@ def search(
     """
     start_time = time.perf_counter()
 
-    logger.add(
-        str(Path(outdir).resolve() / f"{prefix}.markadoros.log"),
-        format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
-        level="INFO",
-    )
-
     # Load and validate database
     try:
         database_index = validate_and_load_index(Path(index))
