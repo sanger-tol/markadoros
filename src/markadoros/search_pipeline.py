@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 import gzip
-import importlib
+import importlib.metadata
 import json
 import shutil
+from math import floor
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
+import pysam
 from loguru import logger
 
 from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
 from markadoros.contig_searcher import ContigSearcher
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.utils import calculate_contig_statistics
+
+if TYPE_CHECKING:
+    from markadoros.assembler_runners import AssemblerRunner
 
 
 class SearchPipeline:
@@ -26,31 +33,32 @@ class SearchPipeline:
         self,
         outdir: Path,
         threads: int,
-        database_index: dict,
-        type: str,
+        database_index: dict[str, dict],
+        input_type: str,
         include_lineage: bool,
-        expected_taxon: str,
+        expected_taxon: str | None,
     ):
         self.outdir = Path(outdir)
         self.threads = threads
         self.database_index = database_index
-        self.type = type
+        self.input_type = input_type
         self.include_lineage = include_lineage
         self.expected_taxon = expected_taxon
 
         # Initialize assembler based on platform
-        if type in ["sr", "short", "illumina"]:
+        assembler: AssemblerRunner | None
+        if input_type in ["sr", "short", "illumina"]:
             assembler = SpadesRunner(threads=self.threads, rna=False)
-        elif type == "rnaseq":
+        elif input_type == "rnaseq":
             assembler = SpadesRunner(threads=self.threads, rna=True)
-        elif type in ["pacbio_hifi", "pb"]:
+        elif input_type in ["pacbio_hifi", "pb"]:
             assembler = HifiasmRunner(threads=self.threads, ont=False)
-        elif type in ["oxford_nanopore", "ont"]:
+        elif input_type in ["oxford_nanopore", "ont"]:
             assembler = HifiasmRunner(threads=self.threads, ont=True)
-        elif type == "contigs":
+        elif input_type == "contigs":
             assembler = None
         else:
-            raise ValueError(f"Unsupported input type: {type}")
+            raise ValueError(f"Unsupported input type: {input_type}")
 
         self.assembler = assembler
 
@@ -92,9 +100,6 @@ class SearchPipeline:
 
         Args:
             result: DataFrame with search results
-            marker: Marker name for output file
-            prefix: Prefix for output file
-            taxon_count: number of records in the database for the expected taxon
             extract_coverage: Whether to extract coverage from target column
             include_lineage: Whether to extract lineage from target column
         """
@@ -142,28 +147,45 @@ class SearchPipeline:
         self,
         input: Path,
         result: pd.DataFrame,
-        outfile: Path,
-        taxon_count: int,
-        marker: str,
-        database: Path,
-        n_reads: int,
+        taxon_count: int | None,
+        marker: str | None,
+        database: str,
+        n_reads: int | None,
+        contig_stats: dict | None = None,
     ) -> dict:
         """
         Summarise a results dataframe, and if provided an expected taxon, check if
         it was found and how many results were found.
         """
+        ## Tally the number of hits per taxon
         found_taxon_counts = result["taxon"].value_counts()
+
+        ## Get the list of taxa with the max count
         taxa_with_max = found_taxon_counts[
             found_taxon_counts == found_taxon_counts.max()
         ]
 
+        ## Summarise top hit for each taxon with max count
+        top_taxa_dict = {}
+        for taxon in taxa_with_max.index:
+            top_taxon_hit = result[result["taxon"] == taxon].iloc[0]
+            top_taxa_dict[taxon] = {
+                "fident": top_taxon_hit["fident"],
+                "alnlen": top_taxon_hit["alnlen"],
+                "tstart": top_taxon_hit["tstart"],
+                "tend": top_taxon_hit["tend"],
+                "evalue": top_taxon_hit["evalue"],
+                "bits": top_taxon_hit["bits"],
+            }
+
+        ## Get the number of hits for the expected taxon
         expected_taxon_counts_in_result = None
         if self.expected_taxon:
-            expected_taxon_counts_in_result = result["taxon"].value_counts()[
-                self.expected_taxon
-            ]
+            expected_taxon_counts_in_result = found_taxon_counts.get(
+                self.expected_taxon, 0
+            )
             logger.info(
-                f"Found {found_taxon_counts} results for {self.expected_taxon}!"
+                f"Found {expected_taxon_counts_in_result} results for {self.expected_taxon}!"
             )
 
         expectation = (
@@ -177,18 +199,17 @@ class SearchPipeline:
         )
 
         summary = {
-            "most_common_result_taxon": taxa_with_max.idxmax()
-            if len(taxa_with_max) > 0
-            else None,
             "expectation": expectation,
+            "top_taxa_results": top_taxa_dict,
         }
 
-        summary = {
+        output = {
             "input": {
                 "file": str(input),
-                "n_reads": n_reads if self.type != "contigs" else None,
+                "n_reads": n_reads if self.input_type != "contigs" else None,
                 "marker": marker,
                 "database": database,
+                "contig_stats": contig_stats,
             },
             "summary": summary,
             "results": result.to_dict("records"),
@@ -197,7 +218,7 @@ class SearchPipeline:
             },
         }
 
-        return summary
+        return output
 
     def _get_taxon_count(self, taxon_json: Path) -> int:
         """Get count for a specific species from the count JSON."""
@@ -205,100 +226,253 @@ class SearchPipeline:
             data = json.load(f)
             return data.get(self.expected_taxon, 0)
 
+    def _get_contig_stats(self, contigs: Path) -> dict[str, int]:
+        """Calculate assembly statistics from contigs.
+
+        Args:
+            contigs: Path to contigs FASTA file
+
+        Returns:
+            Dictionary with assembly statistics (n, size, n50, longest)
+        """
+        count = 0
+        lengths: list[int] = []
+        with pysam.FastxFile(str(contigs)) as asm:
+            for record in asm:
+                count += 1
+                if record.sequence is not None:
+                    lengths.append(len(record.sequence))
+
+        if not lengths:
+            logger.warning("No contigs found in assembly file!")
+            return {"n": 0, "size": 0, "n50": 0, "longest": 0}
+
+        asm_size = sum(lengths)
+        longest = max(lengths)
+
+        lengths.sort(reverse=True)
+        cumulative_sum = 0
+        n50 = 0
+        for length in lengths:
+            cumulative_sum += length
+            if cumulative_sum >= floor(asm_size / 2):
+                n50 = length
+                break
+
+        logger.info(
+            f"Assembly: {count} contigs (longest {longest}), with an N50 of {n50}"
+        )
+
+        return {"n": count, "size": asm_size, "n50": n50, "longest": longest}
+
+    def _setup_preprocessing(
+        self, input: Path, n_reads: int | None, prefix: str
+    ) -> tuple[ReadAssembler | None, Path | None]:
+        """Setup read preprocessing and assembly pipeline if needed.
+
+        Returns:
+            Tuple of (read_assembler, subsampled_reads) or (None, None) if not applicable
+        """
+        if self.input_type == "contigs" or self.assembler is None:
+            return None, None
+
+        preprocessor = ReadPreprocessor(self.outdir / "tmp")
+        subsampled_reads = preprocessor.preprocess_reads(input, n_reads)
+
+        read_assembler = ReadAssembler(
+            outdir=self.outdir,
+            tmpdir=self.outdir / "tmp",
+            threads=self.threads,
+            prefix=prefix,
+            assembler=self.assembler,
+        )
+
+        return read_assembler, subsampled_reads
+
+    def _get_contigs(
+        self,
+        input: Path,
+        read_assembler: ReadAssembler | None,
+        subsampled_reads: Path | None,
+        marker: str,
+        db_path: Path,
+    ) -> Path | None:
+        """Get contigs either from assembly or input.
+
+        Returns:
+            Path to contigs file, or None if assembly failed
+        """
+        if read_assembler is not None and subsampled_reads is not None:
+            return read_assembler.assemble(
+                input_reads=subsampled_reads,
+                marker=marker,
+                db=db_path,
+            )
+        else:
+            return input
+
+    def _search_contigs(
+        self,
+        contigs: Path,
+        db_path: Path,
+        marker: str,
+        min_seq_id: float | None,
+        min_aln_len: int | None,
+    ) -> pd.DataFrame | None:
+        """Search contigs against the marker database.
+
+        Returns:
+            DataFrame with search results, or None if search failed
+        """
+        contig_searcher = ContigSearcher(
+            tmpdir=self.outdir / "tmp",
+            threads=self.threads,
+        )
+
+        return contig_searcher.search_contigs(
+            contigs=contigs,
+            marker_db=db_path,
+            marker=marker,
+            min_seq_id=min_seq_id if min_seq_id is not None else 0.0,
+            min_aln_len=min_aln_len if min_aln_len is not None else 0,
+        )
+
+    def _save_summary(
+        self,
+        summary: dict,
+        prefix: str,
+        marker: str | None,
+    ) -> None:
+        """Save summary results to JSON file."""
+        output_path = self.outdir / f"{prefix}.{marker}.summary.json"
+        with open(output_path, "w") as f:
+            json.dump(summary, f)
+
+    def _process_database(
+        self,
+        db_name: str,
+        params: dict,
+        input: Path,
+        read_assembler: ReadAssembler | None,
+        subsampled_reads: Path | None,
+        prefix: str,
+        n_reads: int | None,
+    ) -> pd.DataFrame | None:
+        """Process a single database: assemble (if needed), search, and save results.
+
+        Returns:
+            Processed results DataFrame, or None if no results found
+        """
+        # Get taxon count expectation
+        taxon_count = None
+        if self.expected_taxon:
+            taxon_count = self._get_taxon_count(params["taxon_db"])
+            logger.info(
+                f"There are {taxon_count} possible records for {self.expected_taxon}!"
+            )
+
+        # Get contigs (either from assembly or use input directly)
+        db = params.get("db")
+        if db is None:
+            logger.error(f"Database path not found in params for {db_name}!")
+            return None
+        db_path = Path(db)
+        marker = params.get("marker")
+
+        contigs = self._get_contigs(
+            input=input,
+            read_assembler=read_assembler,
+            subsampled_reads=subsampled_reads,
+            marker=marker if marker is not None else "",
+            db_path=db_path,
+        )
+
+        if contigs is None:
+            logger.warning(f"No contigs available for {db_name}!")
+            return None
+
+        # Search contigs against database
+        result = self._search_contigs(
+            contigs=contigs,
+            db_path=db_path,
+            marker=marker if marker is not None else "",
+            min_seq_id=params.get("min_seq_id", 0.0),
+            min_aln_len=params.get("min_aln_len", 0),
+        )
+
+        # Handle empty results
+        if result is None or result.empty:
+            logger.warning(f"No results found for {db_name}!")
+            return None
+
+        # Process results (extract coverage, sort, etc.)
+        result = self._process_results(
+            result=result,
+            extract_coverage=(self.input_type != "contigs"),
+            include_lineage=self.include_lineage,
+        )
+
+        # Generate and save summary
+        summary = self._summarise_result(
+            input=input,
+            result=result,
+            taxon_count=taxon_count,
+            marker=marker,
+            database=str(db_path),
+            n_reads=n_reads,
+            contig_stats=self._get_contig_stats(contigs),
+        )
+        self._save_summary(summary, prefix, marker)
+
+        return result
+
     def run(
         self,
         input: Path,
         n_reads: int | None = None,
         db_name: str | None = None,
         prefix: str | None = None,
-    ) -> dict:
+    ) -> dict[str, pd.DataFrame]:
         """Run the complete search pipeline.
 
         Args:
-            reads: Path to reads file (FASTX or CRAM)
+            input: Path to input file (reads or contigs)
             n_reads: Optional number of reads to subsample
             db_name: Optional single database to search
-            prefix: Output file prefix (defaults to reads stem)
+            prefix: Output file prefix (defaults to input stem)
 
         Returns:
             Dictionary mapping database names to result DataFrames
         """
-        prefix = prefix or input.stem
+        output_prefix = prefix or input.stem
 
-        read_assembler = None
-        subsampled_reads = None
-        # Preprocess reads and set up assembly pipeline
-        if self.type != "contigs" and self.assembler is not None:
-            preprocessor = ReadPreprocessor(self.outdir / "tmp")
-            subsampled_reads = preprocessor.preprocess_reads(input, n_reads)
-
-            read_assembler = ReadAssembler(
-                outdir=self.outdir,
-                tmpdir=self.outdir / "tmp",
-                threads=self.threads,
-                prefix=prefix,
-                assembler=self.assembler,
-            )
+        # Setup preprocessing and assembly if working with reads
+        read_assembler, subsampled_reads = self._setup_preprocessing(
+            input, n_reads, output_prefix
+        )
 
         # Determine which databases to search
         databases = self._filter_databases(db_name)
 
-        # Run analysis for each database
-        results = {}
-        for db_name, params in databases.items():
-            taxon_count = None
-            if self.expected_taxon:
-                taxon_count = self._get_taxon_count(params["taxon_db"])
-                logger.info(
-                    f"There are {taxon_count} possible records for {self.expected_taxon}!"
-                )
-
-            if read_assembler is not None and subsampled_reads is not None:
-                contigs = read_assembler.assemble(
-                    input_reads=subsampled_reads,
-                    marker=params.get("marker"),
-                    db=Path(params.get("db")),
-                )
-            else:
-                contigs = input
-
-            # Search contigs against database
-            contig_searcher = ContigSearcher(
-                tmpdir=self.outdir / "tmp",
-                threads=self.threads,
+        # Process each database
+        results: dict[str, pd.DataFrame] = {}
+        for current_db_name, params in databases.items():
+            result = self._process_database(
+                db_name=current_db_name,
+                params=params,
+                input=input,
+                read_assembler=read_assembler,
+                subsampled_reads=subsampled_reads,
+                prefix=output_prefix,
+                n_reads=n_reads,
             )
 
-            if contigs is not None:
-                contig_stats = calculate_contig_statistics(contigs)
-                logger.info(
-                    f"Assembly: {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
-                )
+            if result is not None:
+                results[current_db_name] = result
 
-                result = contig_searcher.search_contigs(
-                    contigs=contigs,
-                    marker_db=Path(params.get("db")),
-                    marker=params.get("marker"),
-                    min_seq_id=params.get("min_seq_id"),
-                    min_aln_len=params.get("min_aln_len"),
-                )
-            else:
-                result = None
-
-            if result is None or result.empty:
-                logger.warning(f"No results found for {db_name}!.")
-                continue
-
-            # Process results (extract coverage, sort, save)
-            result = self._process_results(
-                result=result,
-                extract_coverage=(self.type != "contigs"),
-                include_lineage=self.include_lineage,
-            )
-            results[db_name] = result
-
-        # Display results
-        for db_name, result in results.items():
-            logger.info(f"Top result for {db_name}:")
+        # Display results summary
+        for result_db_name, result in results.items():
+            logger.info(f"Top result for {result_db_name}:")
             self._print_result_summary(result)
 
         return results

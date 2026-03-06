@@ -2,10 +2,8 @@ import json
 import os
 import shutil
 import subprocess
-from math import floor
 from pathlib import Path
 
-import pysam
 from jsonschema import ValidationError, validate
 from loguru import logger
 
@@ -131,34 +129,3 @@ def set_mmseqs_path() -> None:
         "Could not find mmseqs2 binary on PATH or MMSEQS2_PATH. "
         "Please install mmseqs2 or set the MMSEQS2_PATH environment variable."
     )
-
-
-def calculate_contig_statistics(contigs: Path) -> dict[str, int]:
-    """Calculate assembly statistics from contigs.
-
-    Args:
-        contigs: Path to contigs FASTA file
-
-    Returns:
-        Dictionary with assembly statistics (n, size, n50)
-    """
-    count = 0
-    lengths = []
-    with pysam.FastxFile(str(contigs)) as asm:
-        for record in asm:
-            count += 1
-            if record.sequence is not None:
-                lengths.append(len(record.sequence))
-
-    asm_size = sum(lengths)
-
-    lengths.sort(reverse=True)
-    cumulative_sum = 0
-    n50 = 0
-    for length in lengths:
-        cumulative_sum += length
-        if cumulative_sum >= floor(asm_size / 2):
-            n50 = length
-            break
-
-    return {"n": count, "size": asm_size, "n50": n50, "longest": max(lengths)}

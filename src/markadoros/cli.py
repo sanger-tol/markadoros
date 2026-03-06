@@ -230,7 +230,7 @@ def search(
     pipeline = SearchPipeline(
         outdir=Path(outdir),
         threads=threads,
-        type=type,
+        input_type=type,
         database_index=database_index,
         include_lineage=include_lineage,
         expected_taxon=expected_taxon,
