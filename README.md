@@ -110,7 +110,6 @@ markadoros search --type illumina --index db/db.json reads.fq.gz
 - `--prefix, -p <name>` - Output file prefix (default: input filename)
 - `--outdir, -o <path>` - Output directory (default: current directory)
 - `--threads, -t <N>` - Number of threads (default: 1)
-- `--include-lineage` - Include lineage information in output
 - `--expected_taxon <name>` - Expected taxon binomial name for validation
 - `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
 

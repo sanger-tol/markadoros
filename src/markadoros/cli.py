@@ -181,12 +181,6 @@ def database(
     help="Clean up temporary files after completion.",
 )
 @click.option(
-    "--include-lineage",
-    is_flag=True,
-    default=False,
-    help="Include lineage information in output.",
-)
-@click.option(
     "--expected_taxon",
     type=str,
     help="The expected taxon binomial name.",
@@ -201,7 +195,6 @@ def search(
     outdir: str,
     prefix: str,
     nreads: int,
-    include_lineage: bool,
     expected_taxon: str,
     threads: int,
     db: str,
@@ -226,7 +219,6 @@ def search(
         threads=threads,
         input_type=type,
         database_index=database_index,
-        include_lineage=include_lineage,
         expected_taxon=expected_taxon,
     )
     pipeline.run(

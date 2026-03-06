@@ -35,14 +35,12 @@ class SearchPipeline:
         threads: int,
         database_index: dict[str, dict],
         input_type: str,
-        include_lineage: bool,
         expected_taxon: str | None,
     ):
         self.outdir = Path(outdir)
         self.threads = threads
         self.database_index = database_index
         self.input_type = input_type
-        self.include_lineage = include_lineage
         self.expected_taxon = expected_taxon
 
         # Initialize assembler based on platform
@@ -116,6 +114,7 @@ class SearchPipeline:
         result["seq_id"] = result["query"].str.split("|").str[0]
         result["marker"] = result["query"].str.split("|").str[1]
         result["taxon"] = result["query"].str.split("|").str[2].str.replace("_", " ")
+        result["lineage"] = result["query"].str.split("|").str[3]
 
         if extract_coverage:
             result["coverage"] = (
@@ -126,11 +125,6 @@ class SearchPipeline:
             )
         else:
             result["coverage"] = pd.NA
-
-        if include_lineage:
-            result["lineage"] = result["query"].str.split("|").str[3]
-        else:
-            result["lineage"] = pd.NA
 
         if extract_coverage:
             result = result.sort_values(
@@ -417,7 +411,6 @@ class SearchPipeline:
         result = self._process_results(
             result=result,
             extract_coverage=(self.input_type != "contigs"),
-            include_lineage=self.include_lineage,
         )
 
         # Generate and save summary
