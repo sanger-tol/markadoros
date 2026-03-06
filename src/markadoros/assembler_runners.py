@@ -179,7 +179,7 @@ class HifiasmRunner(AssemblerRunner):
                     for field in line_:
                         match = re.search(r"rd:i:(\d+)", field)
                         if match:
-                            header += f"_cov{match.group(1)}"
+                            header += f"_cov_{match.group(1)}"
                             break
 
                     fout.write(f"{header}\n{line_[2]}\n")
