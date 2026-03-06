@@ -83,6 +83,7 @@ def database(
 
     logger.add(
         str(Path(outdir).resolve() / "markadoros.database.log"),
+        format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
         level="INFO",
     )
 
@@ -185,6 +186,11 @@ def database(
     default=False,
     help="Include lineage information in output.",
 )
+@click.option(
+    "--expected_taxon",
+    type=str,
+    help="The expected taxon binomial name.",
+)
 @click.argument(
     "input",
     type=click.Path(exists=True),
@@ -196,6 +202,7 @@ def search(
     prefix: str,
     nreads: int,
     include_lineage: bool,
+    expected_taxon: str,
     threads: int,
     db: str,
     cleanup: bool,
@@ -208,7 +215,8 @@ def search(
     start_time = time.perf_counter()
 
     logger.add(
-        str(Path(outdir).resolve() / f"{prefix}.log"),
+        str(Path(outdir).resolve() / f"{prefix}.markadoros.log"),
+        format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
         level="INFO",
     )
 
@@ -225,6 +233,7 @@ def search(
         type=type,
         database_index=database_index,
         include_lineage=include_lineage,
+        expected_taxon=expected_taxon,
     )
     pipeline.run(
         input=Path(input),

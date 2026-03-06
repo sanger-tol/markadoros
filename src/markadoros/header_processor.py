@@ -1,4 +1,4 @@
-def process_bold_header(header: str) -> tuple[str, str]:
+def process_bold_header(header: str) -> tuple[str, str, str]:
     """Process a BOLD FASTA header and return the new FASTA header."""
     split_header = header.split("|")
 
@@ -8,12 +8,19 @@ def process_bold_header(header: str) -> tuple[str, str]:
     seq_id = split_header[0]
     marker = split_header[1]
     lineage = split_header[3]
-    taxon = [x for x in lineage.split(",") if x != "None"][-1]
 
-    return marker, "|".join([seq_id, marker, taxon, lineage])
+    lineage_split = lineage.split(",")
+    filtered = [x for x in lineage_split if x != "None"]
+
+    if lineage_split[-1] != "None":
+        taxon = lineage_split[-2]
+    else:
+        taxon = filtered[-1] if filtered else "NA"
+
+    return marker, taxon.replace("_", " "), "|".join([seq_id, marker, taxon, lineage])
 
 
-def process_unite_header(header: str) -> tuple[str, str]:
+def process_unite_header(header: str) -> tuple[str, str, str]:
     """Process a UNITE FASTA header and return the new FASTA header."""
     split_header = header.split("|")
 
@@ -25,10 +32,10 @@ def process_unite_header(header: str) -> tuple[str, str]:
     lineage = split_header[4]
     taxon = split_header[0]
 
-    return marker, "|".join([seq_id, marker, taxon, lineage])
+    return marker, taxon.replace("_", " "), "|".join([seq_id, marker, taxon, lineage])
 
 
-def process_generic_header(header: str) -> tuple[str, str]:
+def process_generic_header(header: str) -> tuple[str, str, str]:
     """Process a generic FASTA header and return the new FASTA header."""
     split_header = header.split("|")
 
@@ -38,5 +45,6 @@ def process_generic_header(header: str) -> tuple[str, str]:
         )
 
     marker = split_header[1]
+    taxon = split_header[2]
 
-    return marker, header
+    return marker, taxon.replace("_", " "), header

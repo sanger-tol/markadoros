@@ -17,7 +17,7 @@ class DatabaseFASTAProcessor:
         self,
         databases: dict,
         deduplicate: bool = False,
-        header_processor: Callable[[str], tuple[str, str]] | None = None,
+        header_processor: Callable[[str], tuple[str, str, str]] | None = None,
         tmpdir: Path | None = None,
     ):
         self._databases = databases
@@ -89,7 +89,7 @@ class DatabaseFASTAProcessor:
         else:
             header = "_".join([record.name, record.comment])
 
-        return header
+        return header.replace(" ", "_")
 
     def process(self, fasta: Path) -> dict:
         """Process a FASTA file, splitting by markers with optional deduplication."""
@@ -110,6 +110,9 @@ class DatabaseFASTAProcessor:
         # Count records processed per database
         record_counts = {db: 0 for db in self._databases.keys()}
 
+        # Count the number of records for each taxon
+        taxon_counts = {db: {} for db in self._databases.keys()}
+
         try:
             seq_count = 0
             with pysam.FastxFile(str(fasta), persist=False) as fh:
@@ -119,7 +122,7 @@ class DatabaseFASTAProcessor:
                         logger.info(f"Processed {seq_count:,} sequences")
 
                     header = self._get_header(record)
-                    marker, output_header = self.header_processor(header)
+                    marker, taxon, output_header = self.header_processor(header)
 
                     # Compute sequence hash for deduplication
                     seq_hash = None
@@ -142,6 +145,10 @@ class DatabaseFASTAProcessor:
 
                         if self._deduplicate and seen_sequences is not None:
                             seen_sequences[db_name].add(seq_hash)
+
+                        taxon_counts[db_name][taxon] = (
+                            taxon_counts[db_name].get(taxon, 0) + 1
+                        )
 
                         record_counts[db_name] += 1
                         self._write_fasta_record(
@@ -166,6 +173,7 @@ class DatabaseFASTAProcessor:
                 **self._databases[db],
                 "processed_fasta": (self._tmpdir / f"{db}.fa.gz").resolve(),
                 "n_seqs": record_counts[db],
+                "taxon_counts": taxon_counts[db],
             }
             for db in self._databases.keys()
             if record_counts[db] > 0

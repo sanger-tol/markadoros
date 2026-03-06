@@ -16,7 +16,7 @@ class DatabaseCreator:
         self,
         outdir: Path,
         db_dict: dict,
-        header_processor: Callable[[str], tuple[str, str]] | None = None,
+        header_processor: Callable[[str], tuple[str, str, str]] | None = None,
     ) -> None:
         # Stage output directory
         self._outdir = Path(outdir)
@@ -59,17 +59,19 @@ class DatabaseCreator:
 
         # Build MMSeqs database for each non-empty FASTA output processed
         for database, params in processed_dict.items():
-            db_path = self._db_builder.build(database, params)
+            db_path, taxon_db_path = self._db_builder.build(database, params)
 
             # Add the database path and build FASTA to the db dict, and
             # remove the temporary FASTA file from it
             db_entry = {
                 **params,
                 "db": str(db_path.resolve()),
+                "taxon_db": str(taxon_db_path.resolve()),
                 "built_from": str(fasta.resolve()),
                 "deduplicated": self.deduplicated,
             }
             db_entry.pop("processed_fasta", None)
+            db_entry.pop("taxon_counts", None)
 
             # Add the database entry to the index
             self._db_index.add_entry(database, db_entry)

@@ -1,7 +1,9 @@
+import gzip
+import importlib
+import json
 import shutil
 from pathlib import Path
 
-import click
 import pandas as pd
 from loguru import logger
 
@@ -9,6 +11,7 @@ from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
 from markadoros.contig_searcher import ContigSearcher
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
+from markadoros.utils import calculate_contig_statistics
 
 
 class SearchPipeline:
@@ -26,12 +29,14 @@ class SearchPipeline:
         database_index: dict,
         type: str,
         include_lineage: bool,
+        expected_taxon: str,
     ):
         self.outdir = Path(outdir)
         self.threads = threads
         self.database_index = database_index
         self.type = type
         self.include_lineage = include_lineage
+        self.expected_taxon = expected_taxon
 
         # Initialize assembler based on platform
         if type in ["sr", "short", "illumina"]:
@@ -56,15 +61,14 @@ class SearchPipeline:
 
         out = result.head(1).reset_index()
         for _, row in out.iterrows():
-            click.echo("")
-            click.echo(f"\tcontig: {row['target']}")
-            click.echo(f"\tmatch_id: {row['seq_id']}")
-            click.echo(f"\tmatch_taxon: {row['taxon']}")
-            click.echo(f"\tfident: {row['fident']}")
-            click.echo(f"\talnlen: {row['alnlen']}")
-            if "coverage" in out.columns:
-                click.echo(f"\tcoverage: {row['coverage']}x")
-            click.echo("")
+            logger.info(f"""
+            \tcontig: {row["target"]}
+            \tmatch_id: {row["seq_id"]}
+            \tmatch_taxon: {row["taxon"]}
+            \tfident: {row["fident"]}
+            \talnlen: {row["alnlen"]}
+            \tcoverage: {row["coverage"]}x
+            """)
 
     def _filter_databases(self, db_name: str | None = None) -> dict:
         """Filter databases to search."""
@@ -79,8 +83,6 @@ class SearchPipeline:
     def _process_results(
         self,
         result: pd.DataFrame,
-        marker: str,
-        prefix: str,
         extract_coverage: bool = False,
         include_lineage: bool = False,
     ) -> pd.DataFrame:
@@ -92,6 +94,7 @@ class SearchPipeline:
             result: DataFrame with search results
             marker: Marker name for output file
             prefix: Prefix for output file
+            taxon_count: number of records in the database for the expected taxon
             extract_coverage: Whether to extract coverage from target column
             include_lineage: Whether to extract lineage from target column
         """
@@ -100,7 +103,7 @@ class SearchPipeline:
 
         result["seq_id"] = result["query"].str.split("|").str[0]
         result["marker"] = result["query"].str.split("|").str[1]
-        result["taxon"] = result["query"].str.split("|").str[2]
+        result["taxon"] = result["query"].str.split("|").str[2].str.replace("_", " ")
 
         if extract_coverage:
             result["coverage"] = (
@@ -133,14 +136,74 @@ class SearchPipeline:
         ]
         result = result[desired_cols + remaining_cols]
 
-        result.to_csv(
-            self.outdir / f"{prefix}.{marker}.result.tsv",
-            index=False,
-            sep="\t",
-            na_rep="NA",
+        return result
+
+    def _summarise_result(
+        self,
+        input: Path,
+        result: pd.DataFrame,
+        outfile: Path,
+        taxon_count: int,
+        marker: str,
+        database: Path,
+        n_reads: int,
+    ) -> dict:
+        """
+        Summarise a results dataframe, and if provided an expected taxon, check if
+        it was found and how many results were found.
+        """
+        found_taxon_counts = result["taxon"].value_counts()
+        taxa_with_max = found_taxon_counts[
+            found_taxon_counts == found_taxon_counts.max()
+        ]
+
+        expected_taxon_counts_in_result = None
+        if self.expected_taxon:
+            expected_taxon_counts_in_result = result["taxon"].value_counts()[
+                self.expected_taxon
+            ]
+            logger.info(
+                f"Found {found_taxon_counts} results for {self.expected_taxon}!"
+            )
+
+        expectation = (
+            {
+                "taxon": self.expected_taxon,
+                "count": taxon_count,
+                "found": expected_taxon_counts_in_result,
+            }
+            if self.expected_taxon
+            else {}
         )
 
-        return result
+        summary = {
+            "most_common_result_taxon": taxa_with_max.idxmax()
+            if len(taxa_with_max) > 0
+            else None,
+            "expectation": expectation,
+        }
+
+        summary = {
+            "input": {
+                "file": str(input),
+                "n_reads": n_reads if self.type != "contigs" else None,
+                "marker": marker,
+                "database": database,
+            },
+            "summary": summary,
+            "results": result.to_dict("records"),
+            "run_info": {
+                "version": importlib.metadata.version("markadoros"),
+            },
+        }
+
+        return summary
+
+    def _get_taxon_count(self, taxon_json: Path) -> int:
+        """Get count for a specific species from the count JSON."""
+        with gzip.open(taxon_json, "rt", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get(self.expected_taxon, 0)
 
     def run(
         self,
@@ -183,6 +246,13 @@ class SearchPipeline:
         # Run analysis for each database
         results = {}
         for db_name, params in databases.items():
+            taxon_count = None
+            if self.expected_taxon:
+                taxon_count = self._get_taxon_count(params["taxon_db"])
+                logger.info(
+                    f"There are {taxon_count} possible records for {self.expected_taxon}!"
+                )
+
             if read_assembler is not None and subsampled_reads is not None:
                 contigs = read_assembler.assemble(
                     input_reads=subsampled_reads,
@@ -199,6 +269,11 @@ class SearchPipeline:
             )
 
             if contigs is not None:
+                contig_stats = calculate_contig_statistics(contigs)
+                logger.info(
+                    f"Assembly: {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
+                )
+
                 result = contig_searcher.search_contigs(
                     contigs=contigs,
                     marker_db=Path(params.get("db")),
@@ -215,9 +290,7 @@ class SearchPipeline:
 
             # Process results (extract coverage, sort, save)
             result = self._process_results(
-                result,
-                params.get("marker"),
-                prefix,
+                result=result,
                 extract_coverage=(self.type != "contigs"),
                 include_lineage=self.include_lineage,
             )

@@ -124,36 +124,6 @@ class ReadAssembler:
 
         return output_contigs
 
-    def _get_assembly_stats(self, contigs: Path) -> dict[str, int]:
-        """Calculate assembly statistics from contigs.
-
-        Args:
-            contigs: Path to contigs FASTA file
-
-        Returns:
-            Dictionary with assembly statistics (n, size, n50)
-        """
-        count = 0
-        lengths = []
-        with pysam.FastxFile(str(contigs)) as asm:
-            for record in asm:
-                count += 1
-                if record.sequence is not None:
-                    lengths.append(len(record.sequence))
-
-        asm_size = sum(lengths)
-
-        lengths.sort(reverse=True)
-        cumulative_sum = 0
-        n50 = 0
-        for length in lengths:
-            cumulative_sum += length
-            if cumulative_sum >= floor(asm_size / 2):
-                n50 = length
-                break
-
-        return {"n": count, "size": asm_size, "n50": n50, "longest": max(lengths)}
-
     def assemble(
         self,
         input_reads: Path,
@@ -183,10 +153,5 @@ class ReadAssembler:
         if assembled_contigs is None:
             logger.error(f"Failed to assemble contigs for {marker}")
             return None
-
-        contig_stats = self._get_assembly_stats(assembled_contigs)
-        logger.info(
-            f"Assembled {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
-        )
 
         return assembled_contigs
