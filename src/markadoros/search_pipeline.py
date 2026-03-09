@@ -112,7 +112,7 @@ class SearchPipeline:
         if result.empty:
             return result
 
-        if contigs is not None:
+        if contigs is None:
             raise FileNotFoundError("Error: Contigs file not found!")
 
         sequences = {}
@@ -125,7 +125,9 @@ class SearchPipeline:
         result["marker"] = result["query"].str.split("|").str[1]
         result["taxon"] = result["query"].str.split("|").str[2].str.replace("_", " ")
         result["lineage"] = result["query"].str.split("|").str[3]
-        result["sequence"] = result.apply(extract_subsequence, axis=1)
+        result["sequence"] = result.apply(
+            lambda row: extract_subsequence(row, sequences), axis=1
+        )
 
         if extract_coverage:
             result["coverage"] = (

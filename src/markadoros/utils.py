@@ -152,5 +152,7 @@ def extract_subsequence(row: pd.Series, contigs: dict[str, str]) -> str | None:
     if start > end - 1:
         start, end = end - 1, start + 1
         seq = str(Seq(seq[start:end]).reverse_complement())
+    else:
+        seq = seq[start:end]
 
     return seq
