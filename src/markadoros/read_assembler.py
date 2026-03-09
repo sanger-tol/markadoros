@@ -1,7 +1,5 @@
 import io
-import shutil
 from contextlib import redirect_stdout
-from math import floor
 from pathlib import Path
 
 import bgzip
