@@ -165,6 +165,7 @@ class SearchPipeline:
         marker: str | None,
         database: str,
         n_reads: int | None,
+        n_aligned_reads: int,
         contig_stats: dict | None = None,
     ) -> dict:
         """
@@ -175,11 +176,11 @@ class SearchPipeline:
         found_taxon_counts = result["taxon"].value_counts()
 
         ## Summary for each taxon
-        top_taxa_dict = {}
+        taxon_summary = {}
         for taxon in found_taxon_counts.index:
             taxon_hits = result[result["taxon"] == taxon]
             top_taxon_hit = taxon_hits.iloc[0]
-            top_taxa_dict[taxon] = {
+            taxon_summary[taxon] = {
                 "expected_taxon": True if self.expected_taxon == taxon else False,
                 "n_hits": len(taxon_hits),
                 "fident_range": [
@@ -197,7 +198,7 @@ class SearchPipeline:
                     "tend": int(top_taxon_hit["tend"]),
                     "evalue": float(top_taxon_hit["evalue"]),
                     "bits": int(top_taxon_hit["bits"]),
-                    "sequence": int(top_taxon_hit["bits"]),
+                    "sequence": str(top_taxon_hit["sequence"]),
                 },
             }
 
@@ -214,8 +215,10 @@ class SearchPipeline:
         expectation = (
             {
                 "taxon": self.expected_taxon,
-                "count": taxon_count,
-                "found": expected_taxon_counts_in_result,
+                "counts": {
+                    "available_sequences": taxon_count,
+                    "found_sequences": expected_taxon_counts_in_result,
+                },
             }
             if self.expected_taxon
             else {}
@@ -224,7 +227,7 @@ class SearchPipeline:
         summary = {
             "n_contigs_with_hits": int(result["target"].nunique()),
             "expected_taxon": expectation,
-            "per_taxon_results": top_taxa_dict,
+            "taxon_summary": taxon_summary,
         }
 
         results = {
@@ -236,11 +239,12 @@ class SearchPipeline:
             "input": {
                 "file": str(input.resolve()),
                 "n_reads": n_reads if self.input_type != "contigs" else None,
+                "n_aligned_reads": n_aligned_reads,
                 "marker": marker,
                 "database": database,
                 "contig_stats": contig_stats,
             },
-            "taxon_summary": summary,
+            "summary": summary,
             "results": results,
             "run_info": {
                 "version": importlib.metadata.version("markadoros"),
@@ -325,7 +329,7 @@ class SearchPipeline:
         subsampled_reads: Path | None,
         marker: str,
         db_path: Path,
-    ) -> Path | None:
+    ) -> tuple[int, Path | None]:
         """Get contigs either from assembly or input.
 
         Returns:
@@ -338,7 +342,7 @@ class SearchPipeline:
                 db=db_path,
             )
         else:
-            return input
+            return 0, input
 
     def _search_contigs(
         self,
@@ -408,7 +412,7 @@ class SearchPipeline:
         db_path = Path(db)
         marker = params.get("marker")
 
-        contigs = self._get_contigs(
+        n_aligned_reads, contigs = self._get_contigs(
             input=input,
             read_assembler=read_assembler,
             subsampled_reads=subsampled_reads,
@@ -449,6 +453,7 @@ class SearchPipeline:
             marker=marker,
             database=str(db_path),
             n_reads=n_reads,
+            n_aligned_reads=n_aligned_reads,
             contig_stats=self._get_contig_stats(contigs),
         )
         self._save_summary(summary, prefix, marker)

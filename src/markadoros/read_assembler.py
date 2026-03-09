@@ -33,7 +33,7 @@ class ReadAssembler:
 
     def _extract_reads(
         self, search_result: MMSeqsSearchParser, input_reads: Path, output_path: Path
-    ) -> Path | None:
+    ) -> tuple[int, Path | None]:
         """Extract aligned reads to file. Returns path to output file or None if no reads."""
         with redirect_stdout(io.StringIO()):
             aligned_reads = {read["query"] for read in search_result.to_gen()}
@@ -49,14 +49,14 @@ class ReadAssembler:
                         reads_extracted += 1
                         writer.write((str(read) + "\n").encode("utf-8"))
 
-        logger.info(f"Extracted {reads_extracted} reads!")
-
         if reads_extracted == 0:
-            return None
+            return 0, None
 
-        return output_path
+        return reads_extracted, output_path
 
-    def _filter_reads(self, input_reads: Path, marker: str, db: Path) -> Path | None:
+    def _filter_reads(
+        self, input_reads: Path, marker: str, db: Path
+    ) -> tuple[int, Path | None]:
         """Pre-filter reads against database and extract aligned reads."""
         input_db_path = self.tmpdir / "input" / "db"
         input_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,8 +69,6 @@ class ReadAssembler:
                 v=3,
             )
             db_config.run()
-
-        logger.info(f"Searching reads against {marker}...")
 
         search_result_db = self.tmpdir / marker / "search_reads" / "db"
         search_result_db.parent.mkdir(parents=True, exist_ok=True)
@@ -98,18 +96,16 @@ class ReadAssembler:
 
         reads_search = MMSeqsSearchParser(search_config)
 
-        logger.info("Extracting aligned reads...")
-        aligned_reads = self._extract_reads(
+        n_extracted_reads, aligned_reads = self._extract_reads(
             reads_search,
             input_reads,
             self.tmpdir / marker / f"{Path(input_reads).stem}.match.fq.gz",
         )
 
-        return aligned_reads
+        return n_extracted_reads, aligned_reads
 
     def _assemble_reads(self, aligned_reads: Path, marker: str) -> Path | None:
         """Assemble filtered reads into contigs."""
-        logger.info(f"Assembling reads for {marker}...")
         contigs = self.assembler.assemble(
             aligned_reads,
             self.tmpdir / marker / "assembly.out",
@@ -118,18 +114,14 @@ class ReadAssembler:
         if not contigs or contigs.stat().st_size == 0:
             return None
 
-        # Copy contigs to output directory
-        output_contigs = self.outdir / f"{self.prefix}.{marker}.contigs.fasta"
-        shutil.copy2(contigs, output_contigs)
-
-        return output_contigs
+        return contigs
 
     def assemble(
         self,
         input_reads: Path,
         marker: str,
         db: Path,
-    ) -> Path | None:
+    ) -> tuple[int, Path | None]:
         """Filter reads and assemble them into contigs.
 
         Args:
@@ -141,17 +133,21 @@ class ReadAssembler:
             Path to assembled contigs FASTA file, or None if assembly failed
         """
         # Filter reads against target database
-        aligned_reads = self._filter_reads(input_reads, marker, db)
+        n_aligned_reads, aligned_reads = self._filter_reads(input_reads, marker, db)
 
+        logger.info(f"Searching reads against {marker}...")
         if aligned_reads is None:
             logger.error(f"No reads aligned to {marker}")
-            return None
+            return n_aligned_reads, None
+        else:
+            logger.info(f"Extracted {n_aligned_reads} reads aligning to {marker}!")
 
         # Assemble filtered reads
+        logger.info(f"Assembling reads for {marker}...")
         assembled_contigs = self._assemble_reads(aligned_reads, marker)
 
         if assembled_contigs is None:
             logger.error(f"Failed to assemble contigs for {marker}")
-            return None
+            return n_aligned_reads, None
 
-        return assembled_contigs
+        return n_aligned_reads, assembled_contigs
