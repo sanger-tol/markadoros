@@ -4,6 +4,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pandas as pd
+from Bio.Seq import Seq
 from jsonschema import ValidationError, validate
 from loguru import logger
 
@@ -129,3 +131,26 @@ def set_mmseqs_path() -> None:
         "Could not find mmseqs2 binary on PATH or MMSEQS2_PATH. "
         "Please install mmseqs2 or set the MMSEQS2_PATH environment variable."
     )
+
+
+def extract_subsequence(row: pd.Series, contigs: dict[str, str]) -> str | None:
+    """
+    Extracts a subsequence from a contig based on the tstart and tend coordinates in the row.
+
+    Returns the reverse complement if tstart > tend.
+    """
+    target = row["target"]
+    if target not in contigs:
+        logger.warning(f"Contig '{target}' not found in FASTA")
+        return None
+
+    seq = contigs[target]
+
+    start = int(row["tstart"] - 1)
+    end = int(row["tend"])
+
+    if start > end - 1:
+        start, end = end - 1, start + 1
+        seq = str(Seq(seq[start:end]).reverse_complement())
+
+    return seq

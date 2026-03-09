@@ -16,6 +16,7 @@ from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
 from markadoros.contig_searcher import ContigSearcher
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
+from markadoros.utils import extract_subsequence
 
 if TYPE_CHECKING:
     from markadoros.assembler_runners import AssemblerRunner
@@ -96,8 +97,8 @@ class SearchPipeline:
     def _process_results(
         self,
         result: pd.DataFrame,
+        contigs: Path | None,
         extract_coverage: bool = False,
-        include_lineage: bool = False,
     ) -> pd.DataFrame:
         """Process and save search results.
 
@@ -111,10 +112,20 @@ class SearchPipeline:
         if result.empty:
             return result
 
+        if contigs is not None:
+            raise FileNotFoundError("Error: Contigs file not found!")
+
+        sequences = {}
+        with pysam.FastxFile(str(contigs), persist=False) as fh:
+            for record in fh:
+                if record.sequence is not None:
+                    sequences[record.name] = record.sequence.upper()
+
         result["seq_id"] = result["query"].str.split("|").str[0]
         result["marker"] = result["query"].str.split("|").str[1]
         result["taxon"] = result["query"].str.split("|").str[2].str.replace("_", " ")
         result["lineage"] = result["query"].str.split("|").str[3]
+        result["sequence"] = result.apply(extract_subsequence, axis=1)
 
         if extract_coverage:
             result["coverage"] = (
@@ -131,7 +142,7 @@ class SearchPipeline:
                 by=["coverage", "fident", "alnlen"], ascending=False
             )
         else:
-            result = result.sort_values(by=["fident", "alnlen"], ascending=False)
+            result = result.sort_values(by=["target", "bits"], ascending=[True, False])
 
         # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
         desired_cols = ["target", "coverage", "seq_id", "marker", "taxon", "lineage"]
@@ -161,22 +172,31 @@ class SearchPipeline:
         ## Tally the number of hits per taxon
         found_taxon_counts = result["taxon"].value_counts()
 
-        ## Get the list of taxa with the max count
-        taxa_with_max = found_taxon_counts[
-            found_taxon_counts == found_taxon_counts.max()
-        ]
-
-        ## Summarise top hit for each taxon with max count
+        ## Summary for each taxon
         top_taxa_dict = {}
-        for taxon in taxa_with_max.index:
-            top_taxon_hit = result[result["taxon"] == taxon].iloc[0]
+        for taxon in found_taxon_counts.index:
+            taxon_hits = result[result["taxon"] == taxon]
+            top_taxon_hit = taxon_hits.iloc[0]
             top_taxa_dict[taxon] = {
-                "fident": float(top_taxon_hit["fident"]),
-                "alnlen": int(top_taxon_hit["alnlen"]),
-                "tstart": int(top_taxon_hit["tstart"]),
-                "tend": int(top_taxon_hit["tend"]),
-                "evalue": float(top_taxon_hit["evalue"]),
-                "bits": int(top_taxon_hit["bits"]),
+                "expected_taxon": True if self.expected_taxon == taxon else False,
+                "n_hits": len(taxon_hits),
+                "fident_range": [
+                    float(taxon_hits["fident"].min()),
+                    float(taxon_hits["fident"].max()),
+                ],
+                "alnlen_range": [
+                    int(taxon_hits["alnlen"].min()),
+                    int(taxon_hits["alnlen"].max()),
+                ],
+                "top_hit": {
+                    "fident": float(top_taxon_hit["fident"]),
+                    "alnlen": int(top_taxon_hit["alnlen"]),
+                    "tstart": int(top_taxon_hit["tstart"]),
+                    "tend": int(top_taxon_hit["tend"]),
+                    "evalue": float(top_taxon_hit["evalue"]),
+                    "bits": int(top_taxon_hit["bits"]),
+                    "sequence": int(top_taxon_hit["bits"]),
+                },
             }
 
         ## Get the number of hits for the expected taxon
@@ -201,8 +221,13 @@ class SearchPipeline:
 
         summary = {
             "n_contigs_with_hits": int(result["target"].nunique()),
-            "expectation": expectation,
-            "top_taxa_results": top_taxa_dict,
+            "expected_taxon": expectation,
+            "per_taxon_results": top_taxa_dict,
+        }
+
+        results = {
+            target: group.to_dict(orient="records")
+            for target, group in result.groupby("target")
         }
 
         output = {
@@ -213,8 +238,8 @@ class SearchPipeline:
                 "database": database,
                 "contig_stats": contig_stats,
             },
-            "summary": summary,
-            "results": result.to_dict("records"),
+            "taxon_summary": summary,
+            "results": results,
             "run_info": {
                 "version": importlib.metadata.version("markadoros"),
             },
@@ -411,6 +436,7 @@ class SearchPipeline:
         result = self._process_results(
             result=result,
             extract_coverage=(self.input_type != "contigs"),
+            contigs=contigs,
         )
 
         # Generate and save summary
