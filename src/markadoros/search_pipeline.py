@@ -14,6 +14,7 @@ from loguru import logger
 
 from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
 from markadoros.contig_searcher import ContigSearcher
+from markadoros.input_types import InputType
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
 from markadoros.utils import extract_subsequence
@@ -35,26 +36,30 @@ class SearchPipeline:
         outdir: Path,
         threads: int,
         database_index: dict[str, dict],
-        input_type: str,
+        input_type: InputType,
         expected_taxon: str | None,
+        min_seq_id: float,
+        min_aln_len: int,
     ):
         self.outdir = Path(outdir)
         self.threads = threads
         self.database_index = database_index
         self.input_type = input_type
         self.expected_taxon = expected_taxon
+        self.min_seq_id = min_seq_id
+        self.min_aln_len = min_aln_len
 
         # Initialize assembler based on platform
         assembler: AssemblerRunner | None
-        if input_type in ["sr", "short", "illumina"]:
+        if input_type == InputType.SHORT_READ:
             assembler = SpadesRunner(threads=self.threads, rna=False)
-        elif input_type == "rnaseq":
+        elif input_type == InputType.RNASEQ:
             assembler = SpadesRunner(threads=self.threads, rna=True)
-        elif input_type in ["pacbio_hifi", "pb"]:
+        elif input_type == InputType.PACBIO:
             assembler = HifiasmRunner(threads=self.threads, ont=False)
-        elif input_type in ["oxford_nanopore", "ont"]:
+        elif input_type == InputType.ONT:
             assembler = HifiasmRunner(threads=self.threads, ont=True)
-        elif input_type == "contigs":
+        elif input_type == InputType.CONTIGS:
             assembler = None
         else:
             raise ValueError(f"Unsupported input type: {input_type}")
@@ -238,7 +243,7 @@ class SearchPipeline:
         output = {
             "input": {
                 "file": str(input.resolve()),
-                "n_reads": n_reads if self.input_type != "contigs" else None,
+                "n_reads": n_reads if self.input_type != InputType.CONTIGS else None,
                 "n_aligned_reads": n_aligned_reads,
                 "marker": marker,
                 "database": database,
@@ -306,7 +311,7 @@ class SearchPipeline:
         Returns:
             Tuple of (read_assembler, subsampled_reads) or (None, None) if not applicable
         """
-        if self.input_type == "contigs" or self.assembler is None:
+        if self.input_type == InputType.CONTIGS or self.assembler is None:
             return None, None
 
         preprocessor = ReadPreprocessor(self.outdir / "tmp")
@@ -429,8 +434,8 @@ class SearchPipeline:
             contigs=contigs,
             db_path=db_path,
             marker=marker if marker is not None else "",
-            min_seq_id=params.get("min_seq_id", 0.0),
-            min_aln_len=params.get("min_aln_len", 0),
+            min_seq_id=self.min_seq_id,
+            min_aln_len=self.min_aln_len,
         )
 
         # Handle empty results
@@ -441,7 +446,7 @@ class SearchPipeline:
         # Process results (extract coverage, sort, etc.)
         result = self._process_results(
             result=result,
-            extract_coverage=(self.input_type != "contigs"),
+            extract_coverage=(self.input_type != InputType.CONTIGS),
             contigs=contigs,
         )
 

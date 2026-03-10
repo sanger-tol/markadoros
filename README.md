@@ -3,7 +3,7 @@
 ## Introduction
 
 Markadoros is a Python tool for the identification and assembly of barcode genes in raw sequencing data, using
-[MMSeqs2](https://github.com/soedinglab/MMseqs2) for searching and either [Spades](https://github.com/ablab/spades) or [Hifiasm](https://github.com/chhylp123/hifiasm) for assembly. Using an MMSeqs2 database of marker gene sequences, markadoros searches a set of input reads (providable in either FASTX or CRAM format) to quickly pre-filter reads that map to the target marker gene. Reads that match any barcode sequence in the database are extracted and assembled using an appropriate assembler. The resulting assembled contigs are then searched again using the same database, using more sensitive thresholds, to identify the marker genes from the input dataset.
+[MMSeqs2](https://github.com/soedinglab/MMseqs2) for searching and either [SPAdes](https://github.com/ablab/spades) or [Hifiasm](https://github.com/chhylp123/hifiasm) for assembly. Using an MMSeqs2 database of marker gene sequences, markadoros searches a set of input reads (providable in either FASTX or CRAM format) to quickly pre-filter reads that map to the target marker gene. Reads that match any barcode sequence in the database are extracted and assembled using an appropriate assembler. The resulting assembled contigs are then searched again using the same database, using more sensitive thresholds, to identify the marker genes from the input dataset.
 
 The name *markadoros* comes from the Greek word for a marker pen, *μαρκαδόρος*.
 
@@ -34,6 +34,7 @@ These are automatically installed when you install Markadoros.
 ## Installation
 
 ### From source
+
 ```bash
 pip install -e .
 ```
@@ -49,11 +50,11 @@ conda install -c bioconda mmseqs2 spades hifiasm
 ## Quick Start
 
 ```bash
-# 1. Prepare a database from BOLD release
-markadoros database --preset bold --outdir db/ bold_release.fasta.gz
+# 1. Build a database from a BOLD release
+markadoros database -x bold --marker COI --marker rbcL --prefix BOLD --outdir db/ <bold_release.fasta.gz>
 
 # 2. Search your reads
-markadoros search --type illumina --index db/db.json --db BOLD_COI reads.fq.gz
+markadoros search -x illumina --index db/db.json --db BOLD_COI <reads.fq.gz>
 
 # 3. Check results
 less reads.BOLD_COI.summary.json
@@ -61,90 +62,117 @@ less reads.BOLD_COI.summary.json
 
 ## Detailed Usage
 
-### Database preparation
+### Database Preparation
 
 Use the `database` command to prepare marker gene sequences for searching:
 
 ```bash
-markadoros database --preset bold --outdir db/ /path/to/bold/release.fasta.gz
+markadoros database -x bold \
+    --marker COI --marker rbcL --marker CYTB \
+    --marker matK --marker 18S --marker 28S \
+    --prefix BOLD \
+    --outdir db/ \
+    /path/to/bold/release.fasta.gz
 ```
 
-You can choose a preset to process some pre-defined input FASTA releases correctly. Currently, there are two supported presets:
+**Required options:**
+
+- `--marker <name>` - Marker gene name to extract from input FASTA. Can be specified multiple times for FASTAs containing multiple markers (e.g., `--marker COI-5P --marker ITS`). Inexact matches are allowed.
+- `--prefix <name>` - Prefix for output database names
+
+**Additional options:**
+
+- `-x, --header_type <type>` - Use a preset header processor: `bold` or `unite`
+- `-o, --outdir <path>` - Output directory (default: `./markadoros.db`)
+- `--min_length <N>` - Minimum sequence length to retain (default: 200)
+- `--deduplicate/--no-deduplicate` - Deduplicate sequences (default: deduplicate)
+- `-t, --threads <N>` - Number of threads for MMSeqs2 (default: 1)
+- `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
+
+**Header types:**
 
 - `bold` - [BOLD Systems](https://www.boldsystems.org/) [general FASTA release](https://bench.boldsystems.org/index.php/datapackages/Latest)
 - `unite` - [UNITE](https://unite.ut.ee/) [general FASTA release](https://unite.ut.ee/repository.php)
 
-If your FASTA release does not conform to the above, you can build a custom database. You will
-need to create a params JSON file for your database (see below), and the input FASTA headers must be of the format:
+If your FASTA release does not conform to the above presets, omit the `-x` option. Your input FASTA headers must then be formatted as:
 
 ```
-><unique_id>|<marker>|<taxon_name>|<lineage or null>
+><unique_id>|<marker>|<taxon_name>|<lineage>
 ```
 
-You can then process the input as follows:
-
-```bash
-markadoros build-database --db-params params.json --outdir db/ sequences.fasta
-```
-
-The output of DB preparation includes:
+**Output files:**
 
 - `db.json` - Index of available databases and their parameters
-- `<database_name>/db*` - MMSeqs2 database files
+- `<prefix>_<marker>/db*` - MMSeqs2 database files
+- `<prefix>_<marker>/taxon.json.gz` - Taxon counts for expected taxon matching
 
-If you build a second database pointing to the same output directory, the existing index file will be updated to include the new index.
+If you build additional databases pointing to the same output directory, the existing index file will be updated to include the new entries.
 
-### Searching for barcodes 
+### Searching for Barcodes
 
-Use the `search` command to identify barcode genes in a set of reads or a set of contigs:
+Use the `search` command to identify barcode genes in a set of reads or pre-assembled contigs:
 
 ```bash
-markadoros search --type illumina --index db/db.json reads.fq.gz
+markadoros search -x illumina --index db/db.json reads.fq.gz
 ```
 
-**Options:**
-- `--type, -t` - Input data type (required): `[sr|short|illumina]`, `rnaseq`, `[pacbio_hifi|pb]`, `[oxford_nanopore|ont]`, or `contigs`
-- `--index, -i` - Path to database index JSON (required)
-- `--db <name>` - Search specific database (default: all)
-- `--nreads, -n <N>` - Limit to first N reads
-- `--prefix, -p <name>` - Output file prefix (default: input filename)
-- `--outdir, -o <path>` - Output directory (default: current directory)
-- `--threads, -t <N>` - Number of threads (default: 1)
+**Required options:**
+
+- `-x, --type <type>` - Input data type (see table below)
+- `-i, --index <path>` - Path to database index JSON
+
+**Input type aliases:**
+
+| Platform               | Accepted values                      |
+|------------------------|--------------------------------------|
+| Illumina / short reads | `sr`, `short`, `illumina`            |
+| Short read RNA-seq     | `rnaseq`                             |
+| PacBio HiFi            | `pb`, `pacbio`, `pacbio_hifi`        |
+| Oxford Nanopore        | `ont`, `nanopore`, `oxford_nanopore` |
+| Pre-assembled contigs  | `contigs`                            |
+
+**Additional options:**
+
+- `--db <name>` - Search a specific database only (default: search all databases in index)
+- `-n, --nreads <N>` - Limit to first N reads
+- `-p, --prefix <name>` - Output file prefix (default: input filename)
+- `-o, --outdir <path>` - Output directory (default: current directory)
+- `-t, --threads <N>` - Number of threads (default: 1)
+- `-m, --min_seq_id <float>` - Minimum sequence identity for hits (default: 0.96)
+- `-l, --min_aln_len <int>` - Minimum alignment length for hits (default: 450)
 - `--expected_taxon <name>` - Expected taxon binomial name for validation
 - `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
 
 **Output files:**
-- `<prefix>.marker.contigs.fa` - Assembled marker gene sequences
-- `<prefix>.marker.result.json` - Results in JSON format
 
-### Database Parameters JSON
+- `<prefix>.<marker>.summary.json` - Results in JSON format
 
-Create a custom `params.json` for your marker genes:
+### Example Workflows
 
-```json
-{
-    "parameters": {
-        "deduplicate": true
-    },
-    "databases": {
-        "MY_MARKER_DATABASE": {
-            "marker": "COI-5P",
-            "min_length": 200,
-            "min_seq_id": 0.96,
-            "min_aln_len": 450
-        }
-    }
-}
+**Building a multi-marker database:**
+
+```bash
+# BOLD data contains multiple markers - extract COI-5P and ITS
+markadoros database -x bold \
+    --marker COI \
+    --marker ITS \
+    --prefix BOLD \
+    --outdir db/ \
+    --threads 8 \
+    bold_release.fasta.gz
 ```
 
-**Parameter descriptions:**
-- `deduplicate` - Remove duplicate sequences
+**Searching PacBio HiFi reads with expected taxon:**
 
-**Database options:**
-- `marker` - Marker gene name
-- `min_length` - Minimum sequence length to include
-- `min_seq_id` - Minimum sequence identity for search hits
-- `min_aln_len` - Minimum alignment length for search hits
+```bash
+markadoros search -x pb \
+    --index db/db.json \
+    --db BOLD_COI \
+    --expected_taxon "Halyzia sedecimguttata" \
+    --threads 16 \
+    --nreads 20000 \
+    pacbio_reads.fasta.gz
+```
 
 ## Author
 

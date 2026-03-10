@@ -15,13 +15,13 @@ class DatabaseFASTAProcessor:
 
     def __init__(
         self,
-        databases: dict,
-        deduplicate: bool = False,
+        deduplicate: bool = True,
         header_processor: Callable[[str], tuple[str, str, str]] | None = None,
         tmpdir: Path | None = None,
+        min_length: int = 200,
     ):
-        self._databases = databases
         self._deduplicate = deduplicate
+        self._min_length = min_length
         self._tmpdir = tmpdir or Path.cwd()
 
         if header_processor is None:
@@ -51,7 +51,6 @@ class DatabaseFASTAProcessor:
         sequence: str | None,
         seq_hash: str | None,
         db_marker: str,
-        min_length: int,
         db_seen_sequences: set[str] | None,
     ) -> bool:
         """Check if a record should be included in the database."""
@@ -59,11 +58,11 @@ class DatabaseFASTAProcessor:
             raise ValueError("Error: Input sequence is null!")
 
         # Check if marker matches
-        if db_marker not in marker:
+        if not marker.startswith(db_marker) and marker != db_marker:
             return False
 
         # Check minimum length
-        if len(sequence) < min_length:
+        if len(sequence) < self._min_length:
             return False
 
         # Check for duplicates
@@ -91,27 +90,23 @@ class DatabaseFASTAProcessor:
 
         return header.replace(" ", "_")
 
-    def process(self, fasta: Path) -> dict:
+    def process(self, fasta: Path, databases: dict[str, dict[str, str]]) -> dict:
         """Process a FASTA file, splitting by markers with optional deduplication."""
-        markers = [info.get("marker") for info in self._databases.values()]
+        markers = [info["marker"] for info in databases.values()]
         logger.info(f"Splitting {fasta.name} by markers: {', '.join(markers)}")
 
         # Open output files for each database
         output_handles = {
-            db: gzip.open(self._tmpdir / f"{db}.fa.gz", "ab")
-            for db in self._databases.keys()
+            db: gzip.open(self._tmpdir / f"{db}.fa.gz", "wb") for db in databases.keys()
         }
 
         # Track which sequences are seen if we are deduplicating
         seen_sequences = (
-            {db: set() for db in self._databases.keys()} if self._deduplicate else None
+            {db: set() for db in databases.keys()} if self._deduplicate else None
         )
 
         # Count records processed per database
-        record_counts = {db: 0 for db in self._databases.keys()}
-
-        # Count the number of records for each taxon
-        taxon_counts = {db: {} for db in self._databases.keys()}
+        record_counts = {db: 0 for db in databases.keys()}
 
         try:
             seq_count = 0
@@ -130,13 +125,12 @@ class DatabaseFASTAProcessor:
                         seq_hash = self._compute_sequence_hash(record.sequence)
 
                     # Write to appropriate database files
-                    for db_name, marker_info in self._databases.items():
+                    for db_name, marker_info in databases.items():
                         if not self._should_include_record(
                             marker,
                             record.sequence,
                             seq_hash,
-                            marker_info.get("marker"),
-                            marker_info.get("min_length"),
+                            marker_info["marker"],
                             seen_sequences[db_name]
                             if seen_sequences is not None
                             else None,
@@ -145,10 +139,6 @@ class DatabaseFASTAProcessor:
 
                         if self._deduplicate and seen_sequences is not None:
                             seen_sequences[db_name].add(seq_hash)
-
-                        taxon_counts[db_name][taxon] = (
-                            taxon_counts[db_name].get(taxon, 0) + 1
-                        )
 
                         record_counts[db_name] += 1
                         self._write_fasta_record(
@@ -170,11 +160,10 @@ class DatabaseFASTAProcessor:
         # Build output dictionary with only databases that have records
         return {
             db: {
-                **self._databases[db],
+                **databases[db],
                 "processed_fasta": (self._tmpdir / f"{db}.fa.gz").resolve(),
                 "n_seqs": record_counts[db],
-                "taxon_counts": taxon_counts[db],
             }
-            for db in self._databases.keys()
+            for db in databases.keys()
             if record_counts[db] > 0
         }

@@ -6,7 +6,7 @@ from loguru import logger
 
 from markadoros.database_fasta_processor import DatabaseFASTAProcessor
 from markadoros.database_index import DatabaseIndex
-from markadoros.marker_database_builder import MarkerDatabaseBuilder
+from markadoros.mmseqs_database_builder import MMSeqsDatabaseBuilder
 
 
 class DatabaseCreator:
@@ -15,8 +15,10 @@ class DatabaseCreator:
     def __init__(
         self,
         outdir: Path,
-        db_dict: dict,
         header_processor: Callable[[str], tuple[str, str, str]] | None = None,
+        deduplicate: bool = True,
+        min_length: int = 200,
+        threads: int = 1,
     ) -> None:
         # Stage output directory
         self._outdir = Path(outdir)
@@ -27,35 +29,36 @@ class DatabaseCreator:
         self._tmpdir = self._outdir / "tmp"
         self._tmpdir.mkdir(parents=True, exist_ok=True)
 
-        # Extract database parameters
-        required_keys = {"parameters", "databases"}
-        missing_keys = required_keys - set(db_dict.keys())
-        if missing_keys:
-            raise KeyError(
-                f"Missing required keys in database configuration: {missing_keys}"
-            )
-
-        parameters = db_dict["parameters"]
-        databases = db_dict["databases"]
-
-        self.deduplicated = parameters.get("deduplicate", False)
+        self.deduplicate = deduplicate
+        self.min_length = min_length
+        self.threads = threads
 
         # Initialize FastaProcessor
         self._fasta_processor = DatabaseFASTAProcessor(
-            databases=databases,
-            deduplicate=parameters.get("deduplicate", False),
+            deduplicate=deduplicate,
             header_processor=header_processor,
             tmpdir=self._tmpdir,
+            min_length=min_length,
         )
 
         # Initialize MarkerDatabaseBuilder and DatabaseIndex
-        self._db_builder = MarkerDatabaseBuilder(self._outdir, self._tmpdir)
+        self._db_builder = MMSeqsDatabaseBuilder(
+            self._outdir, self._tmpdir, threads=threads
+        )
         self._db_index = DatabaseIndex(self._outdir / "db.json")
 
-    def create_marker_database(self, fasta: Path) -> None:
+    def create_marker_database(
+        self,
+        fasta: Path,
+        markers: list[str],
+        prefix: str,
+    ) -> None:
         """Create MMSeqs2 databases from a FASTA file."""
         # Process FASTA file
-        processed_dict = self._fasta_processor.process(fasta)
+        processed_dict = self._fasta_processor.process(
+            fasta=fasta,
+            databases={f"{prefix}_{x}": {"marker": x} for x in markers},
+        )
 
         # Build MMSeqs database for each non-empty FASTA output processed
         for database, params in processed_dict.items():
@@ -68,10 +71,9 @@ class DatabaseCreator:
                 "db": str(db_path.resolve()),
                 "taxon_db": str(taxon_db_path.resolve()),
                 "built_from": str(fasta.resolve()),
-                "deduplicated": self.deduplicated,
+                "deduplicated": self.deduplicate,
             }
             db_entry.pop("processed_fasta", None)
-            db_entry.pop("taxon_counts", None)
 
             # Add the database entry to the index
             self._db_index.add_entry(database, db_entry)

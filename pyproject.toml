@@ -34,10 +34,6 @@ markadoros = "markadoros:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/markadoros"]
-include = [
-    "/src/markadoros/data/bold.json",
-    "/src/markadoros/data/unite.json",
-]
 
 [build-system]
 build-backend  = 'hatchling.build'

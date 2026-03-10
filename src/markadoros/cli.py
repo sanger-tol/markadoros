@@ -7,12 +7,13 @@ from pathlib import Path
 import click
 from loguru import logger
 
-from markadoros.data import BOLD_CONFIG, UNITE_CONFIG
 from markadoros.database_creator import DatabaseCreator
 from markadoros.header_processor import (
     process_bold_header,
+    process_generic_header,
     process_unite_header,
 )
+from markadoros.input_types import get_valid_input_types, normalize_input_type
 from markadoros.search_pipeline import SearchPipeline
 from markadoros.utils import set_mmseqs_path, validate_and_load_index
 
@@ -34,16 +35,36 @@ def cli():
 
 @cli.command()
 @click.option(
-    "--preset",
-    "-p",
+    "--header_type",
+    "-x",
     type=click.Choice(["bold", "unite"]),
-    help="Use a preset profile to generate databases.",
+    help="Use a preset header processor to generate databases.",
     default=None,
 )
 @click.option(
-    "--db-params",
-    type=click.Path(exists=True),
-    help="If building a custom database, a JSON file describing each sub-database to be generated.",
+    "--marker",
+    type=str,
+    help="The name of a marker gene to find in the input FASTA. Can be specified multiple times for each marker present in the data.",
+    multiple=True,
+    required=True,
+)
+@click.option(
+    "--prefix",
+    type=str,
+    help="Prefix to prefix output database names with.",
+    required=True,
+)
+@click.option(
+    "--min_length",
+    type=int,
+    default=200,
+    help="Minimum length of a sequence to retain.",
+)
+@click.option(
+    "--deduplicate/--no-deduplicate",
+    is_flag=True,
+    default=True,
+    help="Whether to deduplicate sequences in the output database.",
 )
 @click.option(
     "--outdir",
@@ -67,8 +88,11 @@ def cli():
 )
 @click.argument("fasta", type=click.Path(exists=True))
 def database(
-    preset: str,
-    db_params: str,
+    header_type: str,
+    marker: list[str],
+    prefix: str,
+    min_length: int,
+    deduplicate: bool,
     fasta: str,
     outdir: str,
     threads: int,
@@ -87,24 +111,24 @@ def database(
         level="INFO",
     )
 
-    if preset == "bold":
-        db_dict = BOLD_CONFIG
+    if header_type == "bold":
         header_processor = process_bold_header
-    elif preset == "unite":
-        db_dict = UNITE_CONFIG
+    elif header_type == "unite":
         header_processor = process_unite_header
     else:
-        with open(db_params, "r") as f:
-            db_dict = json.load(f)
-        header_processor = None
+        header_processor = process_generic_header
 
     database_creator = DatabaseCreator(
         outdir=Path(outdir),
-        db_dict=db_dict,
         header_processor=header_processor,
+        deduplicate=deduplicate,
+        min_length=min_length,
+        threads=threads,
     )
     database_creator.create_marker_database(
         fasta=Path(fasta),
+        markers=list(marker),
+        prefix=prefix,
     )
 
     elapsed = time.perf_counter() - start_time
@@ -120,19 +144,7 @@ def database(
 @click.option(
     "--type",
     "-x",
-    type=click.Choice(
-        [
-            "sr",
-            "short",
-            "illumina",
-            "rnaseq",
-            "pb",
-            "pacbio_hifi",
-            "ont",
-            "oxford_nanopore",
-            "contigs",
-        ]
-    ),
+    type=click.Choice(get_valid_input_types()),
     default="sr",
     required=True,
     help="Input data type, either a sequencing platform (to choose the right assembler), or pre-assembled contigs.",
@@ -181,6 +193,20 @@ def database(
     help="Clean up temporary files after completion.",
 )
 @click.option(
+    "--min_seq_id",
+    "-m",
+    type=float,
+    default=0.96,
+    help="Minimum sequence ID required to report a hit.",
+)
+@click.option(
+    "--min_aln_len",
+    "-l",
+    type=int,
+    default=450,
+    help="Minimum alignment length required to report a hit.",
+)
+@click.option(
     "--expected_taxon",
     type=str,
     help="The expected taxon binomial name.",
@@ -196,6 +222,8 @@ def search(
     prefix: str,
     nreads: int,
     expected_taxon: str,
+    min_seq_id: float,
+    min_aln_len: int,
     threads: int,
     db: str,
     cleanup: bool,
@@ -213,13 +241,18 @@ def search(
     except (FileNotFoundError, json.JSONDecodeError) as e:
         raise click.ClickException(f"Could not load database from {index}: {e}")
 
+    # Normalize input type
+    input_type = normalize_input_type(type)
+
     # Run pipeline
     pipeline = SearchPipeline(
         outdir=Path(outdir),
         threads=threads,
-        input_type=type,
+        input_type=input_type,
         database_index=database_index,
         expected_taxon=expected_taxon,
+        min_seq_id=min_seq_id,
+        min_aln_len=min_aln_len,
     )
     pipeline.run(
         input=Path(input),

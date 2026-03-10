@@ -2,8 +2,17 @@ def process_bold_header(header: str) -> tuple[str, str, str]:
     """Process a BOLD FASTA header and return the new FASTA header."""
     split_header = header.split("|")
 
-    if not len(split_header) == 4 or "," not in split_header[3]:
-        raise ValueError(f"Invalid BOLD header: {header}")
+    if len(split_header) != 4:
+        raise ValueError(
+            f"Invalid BOLD header: expected 4 pipe-separated fields, got {len(split_header)}. "
+            f"Header: {header[:100]}..."
+        )
+
+    if "," not in split_header[3]:
+        raise ValueError(
+            f"Invalid BOLD header: lineage field (4th) should contain commas. "
+            f"Header: {header[:100]}..."
+        )
 
     seq_id = split_header[0]
     marker = split_header[1]
