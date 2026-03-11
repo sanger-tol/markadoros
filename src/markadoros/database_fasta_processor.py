@@ -84,12 +84,18 @@ class DatabaseFASTAProcessor:
         markers = [info["marker"] for info in databases.values()]
         logger.info(f"Splitting {fasta.name} by markers: {', '.join(markers)}")
 
+        # Divide threads among writers to avoid oversubscription
+        n_databases = len(databases)
+        threads_per_writer = (
+            self._threads // n_databases if n_databases <= self._threads else 1
+        )
+
         # Open output files for each database with parallel gzip compression
         output_handles = {
             db: pgzip.open(
                 self._tmpdir / f"{db}.fa.gz",
                 "wb",
-                thread=self._threads,
+                thread=threads_per_writer,
                 blocksize=2 * 10**8,
             )
             for db in databases.keys()

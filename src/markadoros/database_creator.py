@@ -33,6 +33,7 @@ class DatabaseCreator:
         self._tmpdir.mkdir(parents=True, exist_ok=True)
 
         self.deduplicate = deduplicate
+        self.cluster = cluster
         self.min_length = min_length
         self.threads = threads
 
@@ -81,6 +82,7 @@ class DatabaseCreator:
                 "taxon_db": str(taxon_db_path.resolve()),
                 "built_from": str(fasta.resolve()),
                 "deduplicated": self.deduplicate,
+                "clustered": self.cluster,
             }
             db_entry.pop("processed_fasta", None)
 

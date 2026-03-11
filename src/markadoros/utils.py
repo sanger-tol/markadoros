@@ -47,12 +47,13 @@ def validate_and_load_index(database: Path) -> dict:
             "type": "object",
             "properties": {
                 "marker": {"type": "string"},
-                "min_length": {"type": "integer", "minimum": 1},
-                "min_seq_id": {"type": "number", "minimum": 0, "maximum": 1},
-                "min_aln_len": {"type": "integer", "minimum": 1},
+                "n_seqs": {"type": "integer", "minimum": 0},
                 "db": {"type": "string"},
+                "built_from": {"type": "string"},
+                "deduplicated": {"type": "boolean"},
+                "clustered": {"type": "boolean"},
             },
-            "required": ["marker", "min_length", "min_seq_id", "min_aln_len", "db"],
+            "required": ["marker", "db"],
         },
     }
 
