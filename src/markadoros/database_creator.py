@@ -17,6 +17,9 @@ class DatabaseCreator:
         outdir: Path,
         header_processor: Callable[[str], tuple[str, str, str]] | None = None,
         deduplicate: bool = True,
+        cluster: bool = False,
+        cluster_perc_id: float = 0.99,
+        cluster_coverage: float = 0.8,
         min_length: int = 200,
         threads: int = 1,
     ) -> None:
@@ -43,7 +46,12 @@ class DatabaseCreator:
 
         # Initialize MarkerDatabaseBuilder and DatabaseIndex
         self._db_builder = MMSeqsDatabaseBuilder(
-            self._outdir, self._tmpdir, threads=threads
+            self._outdir,
+            self._tmpdir,
+            threads=threads,
+            cluster=cluster,
+            cluster_perc_id=cluster_perc_id,
+            cluster_coverage=cluster_coverage,
         )
         self._db_index = DatabaseIndex(self._outdir / "db.json")
 

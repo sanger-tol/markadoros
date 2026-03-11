@@ -220,10 +220,7 @@ class SearchPipeline:
         expectation = (
             {
                 "taxon": self.expected_taxon,
-                "counts": {
-                    "available_sequences": taxon_count,
-                    "found_sequences": expected_taxon_counts_in_result,
-                },
+                "counts": {"available_sequences": taxon_count},
             }
             if self.expected_taxon
             else {}
@@ -231,7 +228,7 @@ class SearchPipeline:
 
         summary = {
             "n_contigs_with_hits": int(result["target"].nunique()),
-            "expected_taxon": expectation,
+            "n_expected_taxon_sequences": expected_taxon_counts_in_result,
             "taxon_summary": taxon_summary,
         }
 
@@ -248,6 +245,7 @@ class SearchPipeline:
                 "marker": marker,
                 "database": database,
                 "contig_stats": contig_stats,
+                "expected_taxon": expectation,
             },
             "summary": summary,
             "results": results,

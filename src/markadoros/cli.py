@@ -35,7 +35,7 @@ def cli():
 
 @cli.command()
 @click.option(
-    "--header_type",
+    "--header-type",
     "-x",
     type=click.Choice(["bold", "unite"]),
     help="Use a preset header processor to generate databases.",
@@ -65,6 +65,24 @@ def cli():
     is_flag=True,
     default=True,
     help="Whether to deduplicate sequences in the output database.",
+)
+@click.option(
+    "--cluster/--no-cluster",
+    is_flag=True,
+    default=True,
+    help="Cluster the database sequences with mmseqs linclust.",
+)
+@click.option(
+    "--cluster_perc_id",
+    type=float,
+    default=0.99,
+    help="Percent identity at which to cluster sequences",
+)
+@click.option(
+    "--cluster_coverage",
+    type=float,
+    default=0.8,
+    help="Coverage overlap at which to cluster sequences",
 )
 @click.option(
     "--outdir",
@@ -115,6 +133,10 @@ def database(
         header_processor = process_bold_header
     elif header_type == "unite":
         header_processor = process_unite_header
+        logger.warning(
+            "--header-type is unite! All --marker specifications are ignored and 'ITS' is forced!"
+        )
+        marker = ["ITS"]
     else:
         header_processor = process_generic_header
 

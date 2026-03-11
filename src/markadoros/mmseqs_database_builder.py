@@ -8,17 +8,27 @@ import pysam
 from loguru import logger
 from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import CreateIndexConfig as MMSeqsCreateIndexConfig
-
-# from pymmseqs.config import EasyLinClustConfig as MMSeqsEasyLinClustConfig
+from pymmseqs.config import EasyLinClustConfig as MMSeqsEasyLinClustConfig
 
 
 class MMSeqsDatabaseBuilder:
     """Handles MMSeqs2 database creation and indexing."""
 
-    def __init__(self, outdir: Path, tmpdir: Path, threads: int = 1):
+    def __init__(
+        self,
+        outdir: Path,
+        tmpdir: Path,
+        cluster: bool = False,
+        threads: int = 1,
+        cluster_perc_id: float = 0.99,
+        cluster_coverage: float = 0.8,
+    ):
         self._outdir = outdir
         self._tmpdir = tmpdir
         self.threads = threads
+        self._cluster = cluster
+        self._cluster_perc_id = cluster_perc_id
+        self._cluster_coverage = cluster_coverage
 
     def _create_db(self, db_path: Path, fasta_file: Path) -> None:
         """Create MMSeqs2 database from FASTA file."""
@@ -31,16 +41,26 @@ class MMSeqsDatabaseBuilder:
             )
             db_config.run()
 
-    # def _cluster_db(self, db_path: Path, fasta_file: Path) -> None:
-    #     """Cluster Fasta file."""
-    #     with redirect_stdout(io.StringIO()):
-    #         cluster_config = MMSeqsEasyLinClustConfig(
-    #             fasta_files=fasta_file,
-    #             cluster_prefix=db_path.resolve(),
-    #             tmp_dir=self._tmpdir.resolve(),
-    #             threads=self.threads,
-    #         )
-    #         clusters = cluster_config.run()
+    def _cluster_db(self, fasta_file: Path, cluster_prefix: Path) -> Path:
+        """Cluster Fasta file."""
+        with redirect_stdout(io.StringIO()):
+            cluster_config = MMSeqsEasyLinClustConfig(
+                fasta_files=fasta_file.resolve(),
+                cluster_prefix=cluster_prefix.resolve(),
+                tmp_dir=self._tmpdir.resolve(),
+                threads=self.threads,
+                min_seq_id=self._cluster_perc_id,
+                c=self._cluster_coverage,
+            )
+            cluster_config.run()
+
+        rep_seq_path = Path(str(cluster_prefix) + "_rep_seq.fasta")
+        if not rep_seq_path.exists():
+            raise FileNotFoundError(
+                f"Expected clustered output not found: {rep_seq_path}"
+            )
+
+        return rep_seq_path
 
     def _index_db(self, db_path: Path) -> None:
         """Index MMSeqs2 database."""
@@ -74,6 +94,13 @@ class MMSeqsDatabaseBuilder:
         """Build and index an MMSeqs2 database."""
         db_path = self._outdir / database / "db"
         taxon_db_path = self._outdir / database / "taxon.json.gz"
+
+        if self._cluster:
+            logger.info(f"Clustering sequences for {database}...")
+            cluster_prefix = self._tmpdir / (database + ".cluster")
+            params["processed_fasta"] = self._cluster_db(
+                fasta_file=params["processed_fasta"], cluster_prefix=cluster_prefix
+            )
 
         logger.info(f"Building MMSeqs2 database for {database}... ")
         self._create_db(db_path, params["processed_fasta"])
