@@ -18,7 +18,7 @@ class DatabaseCreator:
         header_processor: Callable[[str], tuple[str, str, str]] | None = None,
         deduplicate: bool = True,
         cluster: bool = False,
-        cluster_perc_id: float = 0.99,
+        cluster_min_seq_id: float = 0.99,
         cluster_coverage: float = 0.8,
         min_length: int = 200,
         threads: int = 1,
@@ -50,7 +50,7 @@ class DatabaseCreator:
             self._tmpdir,
             threads=threads,
             cluster=cluster,
-            cluster_perc_id=cluster_perc_id,
+            cluster_perc_id=cluster_min_seq_id,
             cluster_coverage=cluster_coverage,
         )
         self._db_index = DatabaseIndex(self._outdir / "db.json")

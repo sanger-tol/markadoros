@@ -73,7 +73,7 @@ def cli():
     help="Cluster the database sequences with mmseqs linclust.",
 )
 @click.option(
-    "--cluster_perc_id",
+    "--cluster_min_seq_id",
     type=float,
     default=0.99,
     help="Percent identity at which to cluster sequences",
@@ -111,6 +111,9 @@ def database(
     prefix: str,
     min_length: int,
     deduplicate: bool,
+    cluster: bool,
+    cluster_coverage: float,
+    cluster_min_seq_id: float,
     fasta: str,
     outdir: str,
     threads: int,
@@ -144,6 +147,9 @@ def database(
         outdir=Path(outdir),
         header_processor=header_processor,
         deduplicate=deduplicate,
+        cluster=cluster,
+        cluster_coverage=cluster_coverage,
+        cluster_min_seq_id=cluster_min_seq_id,
         min_length=min_length,
         threads=threads,
     )
