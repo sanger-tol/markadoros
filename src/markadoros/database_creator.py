@@ -42,6 +42,7 @@ class DatabaseCreator:
             header_processor=header_processor,
             tmpdir=self._tmpdir,
             min_length=min_length,
+            threads=threads,
         )
 
         # Initialize MarkerDatabaseBuilder and DatabaseIndex

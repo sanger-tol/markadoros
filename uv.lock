@@ -25,12 +25,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bgzip"
-version = "0.5.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/91/3d/e389ca7a9ff0ec4805388cda2cd5e019360de45a8321f17e2fefb9a7375d/bgzip-0.5.1.tar.gz", hash = "sha256:9f80cf018befe8f8f201fb571cf42f74e8d72f5bfdf897f4b451286d8abc955f", size = 112955, upload-time = "2025-11-11T19:17:44.745Z" }
-
-[[package]]
 name = "biopython"
 version = "1.86"
 source = { registry = "https://pypi.org/simple" }
@@ -214,12 +208,12 @@ name = "markadoros"
 version = "0.9.0"
 source = { editable = "." }
 dependencies = [
-    { name = "bgzip" },
     { name = "biopython" },
     { name = "click" },
     { name = "jsonschema" },
     { name = "loguru" },
     { name = "pandas" },
+    { name = "pgzip" },
     { name = "pymmseqs" },
     { name = "pysam" },
     { name = "scikit-learn" },
@@ -232,13 +226,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bgzip", specifier = ">=0.5.1" },
     { name = "biopython", specifier = ">=1.86" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pandas", specifier = ">=2.3.3" },
-    { name = "pymmseqs", specifier = ">=1.0.5" },
+    { name = "pgzip", specifier = ">=0.4.0" },
+    { name = "pymmseqs", specifier = ">=1.0.6" },
     { name = "pysam", specifier = ">=0.23.3" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
 ]
@@ -422,6 +416,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pgzip"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/19/22405f889aea5b1cd8cea39124c6c53aac63fc2f0088a374b726d771a6a9/pgzip-0.4.0.tar.gz", hash = "sha256:91f6526f0c6e1f6c2d3522707777e5843fad7c791401745593fd01bd869b7a05", size = 80565, upload-time = "2025-12-23T00:21:26.641Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/59/445da026e3c4dbcba202419303412b51a761947d2ca3a48deaf0c6b33731/pgzip-0.4.0-py3-none-any.whl", hash = "sha256:41e44c03a9f1bbbd390dd6b6e37a11484113f8c159a049fa81cd8a9ddde82a21", size = 13081, upload-time = "2025-12-23T00:21:25.547Z" },
+]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -471,7 +474,7 @@ wheels = [
 
 [[package]]
 name = "pymmseqs"
-version = "1.0.5"
+version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipython" },
@@ -479,7 +482,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/33/85/77f8e96ba4a839b75cbee5637b7ecaf94e88c8e0b6b62d2bbdc79af3fd7f/pymmseqs-1.0.5.tar.gz", hash = "sha256:c5565fedcb540fe559c97a4b27d8f12731cd17abb442dfba4c791f4f56999d61", size = 57875, upload-time = "2025-09-07T13:57:19.337Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/76/e81ce8dbdf3255ef1872677129352dc30b04c003972d303fb0ae15d00a0d/pymmseqs-1.0.6.tar.gz", hash = "sha256:ba147285d12ddbcbada952687cf1870a70a90d3517e7923bb449487aef1e0b33", size = 58040, upload-time = "2026-02-23T05:46:21.942Z" }
 
 [[package]]
 name = "pysam"

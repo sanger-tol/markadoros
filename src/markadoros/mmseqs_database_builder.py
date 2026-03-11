@@ -54,7 +54,7 @@ class MMSeqsDatabaseBuilder:
             )
             cluster_config.run()
 
-        rep_seq_path = Path(str(cluster_prefix) + "_rep_seq.fasta")
+        rep_seq_path = Path(str(cluster_prefix) + "_rep_seq.fasta").resolve()
         if not rep_seq_path.exists():
             raise FileNotFoundError(
                 f"Expected clustered output not found: {rep_seq_path}"

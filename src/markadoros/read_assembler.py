@@ -2,7 +2,7 @@ import io
 from contextlib import redirect_stdout
 from pathlib import Path
 
-import bgzip
+import pgzip
 import pysam
 from loguru import logger
 from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
@@ -39,13 +39,14 @@ class ReadAssembler:
         reads_extracted = 0
         with (
             pysam.FastxFile(str(input_reads)) as fin,
-            open(output_path, mode="wb") as fout,
+            pgzip.open(
+                output_path, mode="wb", thread=self.threads, blocksize=2 * 10**8
+            ) as writer,
         ):
-            with bgzip.BGZipWriter(fout, num_threads=self.threads) as writer:
-                for read in fin:
-                    if read.name in aligned_reads:
-                        reads_extracted += 1
-                        writer.write((str(read) + "\n").encode("utf-8"))
+            for read in fin:
+                if read.name in aligned_reads:
+                    reads_extracted += 1
+                    writer.write((str(read) + "\n").encode("utf-8"))
 
         if reads_extracted == 0:
             return 0, None
