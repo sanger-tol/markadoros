@@ -65,7 +65,7 @@ class DatabaseCreator:
         # Process FASTA file
         processed_dict = self._fasta_processor.process(
             fasta=fasta,
-            databases={f"{prefix}_{x}": {"marker": x} for x in markers},
+            databases={f"{prefix}.{x}": {"marker": x} for x in markers},
         )
 
         # Build MMSeqs database for each non-empty FASTA output processed
