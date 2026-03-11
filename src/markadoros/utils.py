@@ -49,11 +49,12 @@ def validate_and_load_index(database: Path) -> dict:
                 "marker": {"type": "string"},
                 "n_seqs": {"type": "integer", "minimum": 0},
                 "db": {"type": "string"},
+                "taxon_db": {"type": "string"},
                 "built_from": {"type": "string"},
                 "deduplicated": {"type": "boolean"},
                 "clustered": {"type": "boolean"},
             },
-            "required": ["marker", "db"],
+            "required": ["marker", "db", "taxon_db"],
         },
     }
 

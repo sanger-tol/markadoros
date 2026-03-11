@@ -78,7 +78,7 @@ class MMSeqsDatabaseBuilder:
         with pysam.FastxFile(str(db_path)) as fasta:
             for record in fasta:
                 if record.name is not None:
-                    taxon = record.name.split("|")[0]
+                    taxon = record.name.split("|")[2]
                 else:
                     continue
                 taxon_counts[taxon] = taxon_counts.get(taxon, 0) + 1
