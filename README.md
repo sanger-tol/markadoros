@@ -54,10 +54,10 @@ conda install -c bioconda mmseqs2 spades hifiasm
 markadoros database -x bold --marker COI --marker rbcL --prefix BOLD --outdir db/ <bold_release.fasta.gz>
 
 # 2. Search your reads
-markadoros search -x illumina --index db/db.json --db BOLD_COI <reads.fq.gz>
+markadoros search -x illumina --index db/db.json --db BOLD.COI <reads.fq.gz>
 
 # 3. Check results
-less reads.BOLD_COI.summary.json
+less reads.COI.summary.json
 ```
 
 ## Detailed Usage
