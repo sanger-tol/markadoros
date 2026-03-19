@@ -77,12 +77,12 @@ markadoros database -x bold \
 
 **Required options:**
 
-- `--marker <name>` - Marker gene name to extract from input FASTA. Can be specified multiple times for FASTAs containing multiple markers (e.g., `--marker COI-5P --marker ITS`). Inexact matches are allowed.
+- `--marker <name>` - Marker gene name to extract from input FASTA. Can be specified multiple times for FASTAs containing multiple markers (e.g., `--marker COI-5P --marker ITS`). Inexact matches are allowed. Required unless `--header-type` is `unite`.
 - `--prefix <name>` - Prefix for output database names
 
 **Additional options:**
 
-- `-x, --header-type <type>` - Use a preset header processor: `bold` or `unite`. If `unite`, `--marker` is fixed to "ITS"
+- `-x, --header-type <type>` - Use a preset header processor: `bold` or `unite`.
 - `--min-length <N>` - Minimum sequence length to retain (default: 200)
 - `--deduplicate/--no-deduplicate` - Deduplicate identical sequences. The first record for each identical sequence is kept. (default: deduplicate)
 - `--cluster/--no-cluster` - Cluster sequences using MMSeqs2's linear clustering algorithm (default: no cluster)
