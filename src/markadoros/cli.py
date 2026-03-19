@@ -44,9 +44,9 @@ def cli():
 @click.option(
     "--marker",
     type=str,
-    help="The name of a marker gene to find in the input FASTA. Can be specified multiple times for each marker present in the data.",
+    help="The name of a marker gene to find in the input FASTA. Can be specified multiple times for each marker present in the data. Required unless `--header-type` is `unite`.",
     multiple=True,
-    required=True,
+    required=False,
 )
 @click.option(
     "--prefix",
@@ -55,7 +55,7 @@ def cli():
     required=True,
 )
 @click.option(
-    "--min_length",
+    "--min-length",
     type=int,
     default=200,
     help="Minimum length of a sequence to retain.",
@@ -85,10 +85,15 @@ def cli():
     help="Coverage overlap at which to cluster sequences",
 )
 @click.option(
-    "--create_index/--no-create-index",
+    "--create-index/--no-create-index",
     is_flag=True,
     default=False,
     help="Create MMSeqs2 indexes for each marker database.",
+)
+@click.option(
+    "--skip-taxa",
+    type=click.Path(exists=True),
+    help="New-line separated file of taxa to skip when building a database.",
 )
 @click.option(
     "--outdir",
@@ -125,6 +130,7 @@ def database(
     outdir: str,
     threads: int,
     cleanup: bool,
+    skip_taxa: str | None,
 ):
     """
     Build MMSeqs2 databases from a FASTA file, and record their parameters.
@@ -139,13 +145,17 @@ def database(
         level="INFO",
     )
 
+    if marker is None and header_type != "unite":
+        raise click.UsageError("--marker is required when --header-type is not 'unite'")
+
     if header_type == "bold":
         header_processor = process_bold_header
     elif header_type == "unite":
         header_processor = process_unite_header
-        logger.warning(
-            "--header-type is unite! All --marker specifications are ignored and 'ITS' is forced!"
-        )
+        if marker is not None:
+            logger.warning(
+                "--header-type is unite! All --marker specifications are ignored and 'ITS' is forced!"
+            )
         marker = ["ITS"]
     else:
         header_processor = process_generic_header
@@ -160,6 +170,7 @@ def database(
         create_index=create_index,
         min_length=min_length,
         threads=threads,
+        skip_taxa=Path(skip_taxa) if skip_taxa else None,
     )
     database_creator.create_marker_database(
         fasta=Path(fasta),
@@ -287,6 +298,10 @@ def search(
 
     # Normalize input type
     input_type = normalize_input_type(type)
+
+    # Initialise prefix
+    if prefix is None:
+        prefix = Path(input).stem
 
     tmpdir = Path(outdir) / f"{prefix}.tmp"
 

@@ -82,12 +82,17 @@ markadoros database -x bold \
 
 **Additional options:**
 
-- `-x, --header_type <type>` - Use a preset header processor: `bold` or `unite`
+- `-x, --header-type <type>` - Use a preset header processor: `bold` or `unite`. If `unite`, `--marker` is fixed to "ITS"
+- `--min-length <N>` - Minimum sequence length to retain (default: 200)
+- `--deduplicate/--no-deduplicate` - Deduplicate identical sequences. The first record for each identical sequence is kept. (default: deduplicate)
+- `--cluster/--no-cluster` - Cluster sequences using MMSeqs2's linear clustering algorithm (default: no cluster)
+- `--cluster_min_seq_id` - Cluster sequences at this percentage identity threshold (default: 0.99)
+- `--cluster_coverage` - Overlap between two sequences required for clustering (default: 0.8)
+- `--create-index/--no-create-index` - Create an MMSeqs2 index for each marker database. This may improve speed for larger databases, but can cause IO - `--skip-taxa` - New line-separated list of taxon names to skip.
+issues if multiple processes access the same database. (default: False)
 - `-o, --outdir <path>` - Output directory (default: `./markadoros.db`)
-- `--min_length <N>` - Minimum sequence length to retain (default: 200)
-- `--deduplicate/--no-deduplicate` - Deduplicate sequences (default: deduplicate)
-- `-t, --threads <N>` - Number of threads for MMSeqs2 (default: 1)
 - `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
+- `-t, --threads <N>` - Number of threads for MMSeqs2 (default: 1)
 
 **Header types:**
 
@@ -104,7 +109,7 @@ If your FASTA release does not conform to the above presets, omit the `-x` optio
 
 - `db.json` - Index of available databases and their parameters
 - `<prefix>_<marker>/db*` - MMSeqs2 database files
-- `<prefix>_<marker>/taxon.json.gz` - Taxon counts for expected taxon matching
+- `<prefix>_<marker>/taxon.json.gz` - JSON file counting the number of available sequences per taxon.
 
 If you build additional databases pointing to the same output directory, the existing index file will be updated to include the new entries.
 
@@ -134,18 +139,46 @@ markadoros search -x illumina --index db/db.json reads.fq.gz
 **Additional options:**
 
 - `--db <name>` - Search a specific database only (default: search all databases in index)
+- `--expected_taxon <name>` - Expected taxon binomial name for validation
 - `-n, --nreads <N>` - Limit to first N reads
-- `-p, --prefix <name>` - Output file prefix (default: input filename)
-- `-o, --outdir <path>` - Output directory (default: current directory)
-- `-t, --threads <N>` - Number of threads (default: 1)
 - `-m, --min_seq_id <float>` - Minimum sequence identity for hits (default: 0.96)
 - `-l, --min_aln_len <int>` - Minimum alignment length for hits (default: 450)
-- `--expected_taxon <name>` - Expected taxon binomial name for validation
 - `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
+- `--db-to-tmpdir/--no-db-to-tmpdir` - Temporarily copy the database to the temporary directory. Can reduce IO and improve speed if multiple processes would access the database simultaneously. Not suggested if the databases include indexes. (default: True)
+- `-t, --threads <N>` - Number of threads (default: 1)
+- `-p, --prefix <name>` - Output file prefix (default: input filename)
+- `-o, --outdir <path>` - Output directory (default: current directory)
 
 **Output files:**
 
 - `<prefix>.<marker>.summary.json` - Results in JSON format
+
+### Output JSON file
+
+The search subtool outputs a JSON file summarising the search. It has the following format:
+
+```json
+{
+  "input": {
+      "file": <path>, // input file path
+      "n_reads": <int>, // number of reads searched
+      "n_aligned_reads": <int>, // number of reads aligned to database
+      "marker": <string>, // marker gene in database
+      "database": <path>, // path to mmseqs database
+      "contig_stats": <dict>, // number, total length and n50 of assembled contigs
+      "expected_taxon": <dict>, // name of asserted taxon and number of records present in database
+  },
+  "summary": {
+      "n_contigs_with_hits": <int>, // number of assembled contigs with search hits
+      "n_expected_taxon_hits": <int>, // number of hits for the asserted taxon
+      "top_result": <dict>, // top result (highest bitscore) for asserted taxon if found or overall if not
+      "taxon_summary": <dict>, // per-taxon summary of results - number of hits, min and max %ID and alignment lengths, and sequence of top hit
+  },
+  "results": <list>, // for each contig with results, a list of all hits
+  "run_info": <dict> // tool information
+}
+
+```
 
 ### Example Workflows
 

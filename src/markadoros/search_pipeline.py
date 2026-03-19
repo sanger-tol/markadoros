@@ -22,8 +22,6 @@ from markadoros.utils import extract_subsequence
 if TYPE_CHECKING:
     from markadoros.assembler_runners import AssemblerRunner
 
-from pymmseqs.config import TouchDBConfig as MMSeqs2TouchDBConfig
-
 
 class SearchPipeline:
     """Orchestrates the barcode search workflow.
@@ -244,7 +242,7 @@ class SearchPipeline:
 
         summary = {
             "n_contigs_with_hits": int(result["target"].nunique()),
-            "n_expected_taxon_sequences": expected_taxon_counts_in_result,
+            "n_expected_taxon_hits": expected_taxon_counts_in_result,
             "top_result": top_result,
             "taxon_summary": taxon_summary,
         }

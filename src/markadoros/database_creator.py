@@ -16,6 +16,7 @@ class DatabaseCreator:
         self,
         outdir: Path,
         header_processor: Callable[[str], tuple[str, str, str]] | None = None,
+        skip_taxa: Path | None = None,
         deduplicate: bool = True,
         cluster: bool = False,
         cluster_min_seq_id: float = 0.99,
@@ -45,6 +46,7 @@ class DatabaseCreator:
             tmpdir=self._tmpdir,
             min_length=min_length,
             threads=threads,
+            skip_taxa=skip_taxa,
         )
 
         # Initialize MarkerDatabaseBuilder and DatabaseIndex

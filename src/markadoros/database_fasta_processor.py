@@ -21,6 +21,7 @@ class DatabaseFASTAProcessor:
         tmpdir: Path | None = None,
         min_length: int = 200,
         threads: int = 0,
+        skip_taxa: Path | None = None,
     ):
         self._deduplicate = deduplicate
         self._min_length = min_length
@@ -32,6 +33,17 @@ class DatabaseFASTAProcessor:
             self.header_processor = process_generic_header
         else:
             self.header_processor = header_processor
+
+        self._skip_taxa = self._get_skip_taxa(skip_taxa)
+
+    def _get_skip_taxa(self, skip_taxa_file: Path | None) -> set:
+        """
+        Get the set of taxa to skip from a file.
+        """
+        if skip_taxa_file is None:
+            return set()
+        with open(skip_taxa_file, "r") as f:
+            return set(line.strip() for line in f if line.strip())
 
     def _get_canonical_sequence(self, seq: str) -> str:
         """
@@ -102,19 +114,28 @@ class DatabaseFASTAProcessor:
                     seq_count += 1
                     if seq_count % 500000 == 0:
                         logger.info(f"Processed {seq_count:,} sequences")
+
                     sequence = record.sequence
                     if sequence is None:
                         continue
+
                     if len(sequence) < self._min_length:
                         continue
+
                     header = self._get_header(record)
                     marker, taxon, output_header = self.header_processor(header)
+
+                    if taxon in self._skip_taxa:
+                        continue
+
                     matching_dbs = self._find_matching_databases(marker, databases)
                     if not matching_dbs:
                         continue
+
                     seq_hash: str | None = None
                     if self._deduplicate:
                         seq_hash = self._compute_sequence_hash(sequence)
+
                     for db_name in matching_dbs:
                         db_seen = seen_sequences[db_name] if seen_sequences else None
                         if seq_hash is not None and self._is_duplicate(
@@ -127,14 +148,18 @@ class DatabaseFASTAProcessor:
                             and seq_hash is not None
                         ):
                             seen_sequences[db_name].add(seq_hash)
+
                         record_counts[db_name] += 1
                         chunks[db_name].append(
                             f">{output_header}\n{sequence}\n".encode()
                         )
+
                         if len(chunks[db_name]) >= 100_000:
                             flush_chunk(db_name)
+
         except IOError as e:
             raise IOError(f"Error processing {fasta.name}: {e}") from e
+
         finally:
             for db_name in databases.keys():
                 flush_chunk(db_name)
