@@ -185,7 +185,6 @@ The search subtool outputs a JSON file summarising the search. It has the follow
 **Building a marker database for the BOLD FASTA release:**
 
 ```bash
-# BOLD data contains multiple markers - extract COI-5P and ITS
 markadoros database \
     --header-type bold \
     --outdir db/ \
