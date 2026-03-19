@@ -88,8 +88,8 @@ markadoros database -x bold \
 - `--cluster/--no-cluster` - Cluster sequences using MMSeqs2's linear clustering algorithm (default: no cluster)
 - `--cluster_min_seq_id` - Cluster sequences at this percentage identity threshold (default: 0.99)
 - `--cluster_coverage` - Overlap between two sequences required for clustering (default: 0.8)
-- `--create-index/--no-create-index` - Create an MMSeqs2 index for each marker database. This may improve speed for larger databases, but can cause IO - `--skip-taxa` - New line-separated list of taxon names to skip.
-issues if multiple processes access the same database. (default: False)
+- `--create-index/--no-create-index` - Create an MMSeqs2 index for each marker database. This may improve speed for larger databases, but can cause IO issues if multiple processes access the same database. (default: False)
+- `--skip-taxa` - New line-separated list of taxon names to skip.
 - `-o, --outdir <path>` - Output directory (default: `./markadoros.db`)
 - `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
 - `-t, --threads <N>` - Number of threads for MMSeqs2 (default: 1)
