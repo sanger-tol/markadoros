@@ -182,17 +182,20 @@ The search subtool outputs a JSON file summarising the search. It has the follow
 
 ### Example Workflows
 
-**Building a multi-marker database:**
+**Building a marker database for the BOLD FASTA release:**
 
 ```bash
 # BOLD data contains multiple markers - extract COI-5P and ITS
-markadoros database -x bold \
-    --marker COI \
-    --marker ITS \
-    --prefix BOLD \
+markadoros database \
+    --header-type bold \
     --outdir db/ \
-    --threads 8 \
-    bold_release.fasta.gz
+    --marker COI --marker rbcL --marker CYTB \
+    --marker matK --marker 18S --marker 28S \
+    --prefix BOLD \
+    --cluster \
+    --no-deduplicate \
+    --threads 16 \
+    BOLD_Public.20-Feb-2026.fasta.gz
 ```
 
 **Searching PacBio HiFi reads with expected taxon:**
@@ -200,7 +203,7 @@ markadoros database -x bold \
 ```bash
 markadoros search -x pb \
     --index db/db.json \
-    --db BOLD_COI \
+    --db BOLD.COI \
     --expected_taxon "Halyzia sedecimguttata" \
     --threads 16 \
     --nreads 20000 \
