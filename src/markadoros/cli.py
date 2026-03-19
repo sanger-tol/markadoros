@@ -85,6 +85,12 @@ def cli():
     help="Coverage overlap at which to cluster sequences",
 )
 @click.option(
+    "--create_index/--no-create-index",
+    is_flag=True,
+    default=False,
+    help="Create MMSeqs2 indexes for each marker database.",
+)
+@click.option(
     "--outdir",
     "-o",
     type=click.Path(),
@@ -115,6 +121,7 @@ def database(
     cluster_coverage: float,
     cluster_min_seq_id: float,
     fasta: str,
+    create_index: bool,
     outdir: str,
     threads: int,
     cleanup: bool,
@@ -150,6 +157,7 @@ def database(
         cluster=cluster,
         cluster_coverage=cluster_coverage,
         cluster_min_seq_id=cluster_min_seq_id,
+        create_index=create_index,
         min_length=min_length,
         threads=threads,
     )
@@ -213,12 +221,19 @@ def database(
     "--db",
     type=str,
     help="Optionally, the name of a single database within the index file to search with.",
+    required=True,
 )
 @click.option(
     "--cleanup/--no-cleanup",
     is_flag=True,
     default=True,
     help="Clean up temporary files after completion.",
+)
+@click.option(
+    "--db-to-tmpdir/--no-db-to-tmpdir",
+    is_flag=True,
+    default=True,
+    help="Copy the database to the tempdir. Can be useful if running multiple searches simultaneously on the same database, which can cause IO issues.",
 )
 @click.option(
     "--min_seq_id",
@@ -254,6 +269,7 @@ def search(
     min_aln_len: int,
     threads: int,
     db: str,
+    db_to_tmpdir: bool,
     cleanup: bool,
     input: str,
 ):
@@ -272,12 +288,16 @@ def search(
     # Normalize input type
     input_type = normalize_input_type(type)
 
+    tmpdir = Path(outdir) / f"{prefix}.tmp"
+
     # Run pipeline
     pipeline = SearchPipeline(
         outdir=Path(outdir),
+        tmpdir=tmpdir,
         threads=threads,
         input_type=input_type,
         database_index=database_index,
+        db_to_tmpdir=db_to_tmpdir,
         expected_taxon=expected_taxon,
         min_seq_id=min_seq_id,
         min_aln_len=min_aln_len,

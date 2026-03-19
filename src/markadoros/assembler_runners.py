@@ -148,6 +148,7 @@ class HifiasmRunner(AssemblerRunner):
             "--ont" if self.ont else "",
             "-o",
             "asm",
+            "-l0",
             str(reads_fq.resolve()),
         ]
 

@@ -2,14 +2,14 @@ import io
 from contextlib import redirect_stdout
 from pathlib import Path
 
-import pgzip
-import pysam
+from isal import igzip
 from loguru import logger
 from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import SearchConfig as MMSeqsSearchConfig
 from pymmseqs.parsers import SearchParser as MMSeqsSearchParser
 
 from markadoros.assembler_runners import AssemblerRunner
+from markadoros.input_types import InputType
 
 
 class ReadAssembler:
@@ -22,35 +22,46 @@ class ReadAssembler:
         threads: int,
         prefix: str,
         assembler: AssemblerRunner,
+        input_type: InputType,
     ):
         self.outdir = Path(outdir)
         self.tmpdir = Path(tmpdir)
         self.threads = threads
         self.prefix = prefix
         self.assembler = assembler
+        self.input_type = input_type
 
     def _extract_reads(
         self, search_result: MMSeqsSearchParser, input_reads: Path, output_path: Path
     ) -> tuple[int, Path | None]:
         """Extract aligned reads to file. Returns path to output file or None if no reads."""
+
         with redirect_stdout(io.StringIO()):
-            aligned_reads = {read["query"] for read in search_result.to_gen()}
+            aligned_reads = set(search_result.to_pandas()["query"])
 
         reads_extracted = 0
-        with (
-            pysam.FastxFile(str(input_reads)) as fin,
-            pgzip.open(
-                output_path, mode="wb", thread=self.threads, blocksize=2 * 10**8
-            ) as writer,
-        ):
-            for read in fin:
-                if read.name in aligned_reads:
-                    reads_extracted += 1
-                    writer.write((str(read) + "\n").encode("utf-8"))
+        in_opener = igzip.open if str(input_reads).endswith(".gz") else open
+
+        with in_opener(input_reads, "rb") as fin, igzip.open(output_path, "wb") as fout:
+            collected = []
+            current_id = None
+            write_current = False
+            for line in fin:
+                if line[0:1] == b">":
+                    current_id = line[1:].split()[0].decode()
+                    write_current = current_id in aligned_reads
+                    if write_current:
+                        reads_extracted += 1
+                if write_current:
+                    collected.append(line)
+                    if len(collected) >= 100_000:
+                        fout.writelines(collected)
+                        collected.clear()
+            if collected:
+                fout.writelines(collected)
 
         if reads_extracted == 0:
             return 0, None
-
         return reads_extracted, output_path
 
     def _filter_reads(
@@ -84,11 +95,16 @@ class ReadAssembler:
                 v=3,
                 threads=self.threads,
                 s=1,
-                max_seqs=10,
+                max_seqs=50,
                 max_accept=1,
                 alignment_mode=1,
-                min_seq_id=0,
-                min_aln_len=0,
+                min_seq_id=0.5,
+                min_aln_len=450
+                if (
+                    self.input_type == InputType.PACBIO
+                    or self.input_type == InputType.ONT
+                )
+                else 50,
                 exact_kmer_matching=True,
             )
             search_config.run()
@@ -131,10 +147,9 @@ class ReadAssembler:
         Returns:
             Path to assembled contigs FASTA file, or None if assembly failed
         """
-        # Filter reads against target database
+        logger.info(f"Searching reads against {marker}...")
         n_aligned_reads, aligned_reads = self._filter_reads(input_reads, marker, db)
 
-        logger.info(f"Searching reads against {marker}...")
         if aligned_reads is None:
             logger.error(f"No reads aligned to {marker}")
             return n_aligned_reads, None

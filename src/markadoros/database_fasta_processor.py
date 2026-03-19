@@ -3,9 +3,9 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import pgzip
 import pysam
 from Bio.Seq import Seq
+from isal import igzip
 from loguru import logger
 
 from markadoros.header_processor import process_generic_header
@@ -56,10 +56,6 @@ class DatabaseFASTAProcessor:
             return False
         return seq_hash in db_seen_sequences
 
-    def _write_fasta_record(self, handle, name: str, seq: str) -> None:
-        """Write a FASTA record to a gzip file handle."""
-        handle.write(f">{name}\n{seq}\n".encode())
-
     def _get_header(self, record) -> str:
         """Get the full header including comment from a sequence record."""
         if record.comment is None:
@@ -84,30 +80,20 @@ class DatabaseFASTAProcessor:
         markers = [info["marker"] for info in databases.values()]
         logger.info(f"Splitting {fasta.name} by markers: {', '.join(markers)}")
 
-        # Divide threads among writers to avoid oversubscription
-        n_databases = len(databases)
-        threads_per_writer = (
-            self._threads // n_databases if n_databases <= self._threads else 1
-        )
-
-        # Open output files for each database with parallel gzip compression
         output_handles = {
-            db: pgzip.open(
-                self._tmpdir / f"{db}.fa.gz",
-                "wb",
-                thread=threads_per_writer,
-                blocksize=2 * 10**8,
-            )
+            db: igzip.open(self._tmpdir / f"{db}.fa.gz", "wb")
             for db in databases.keys()
         }
-
-        # Track which sequences are seen if we are deduplicating
         seen_sequences: dict[str, set[str]] | None = (
             {db: set() for db in databases.keys()} if self._deduplicate else None
         )
-
-        # Count records processed per database
         record_counts = {db: 0 for db in databases.keys()}
+        chunks: dict[str, list[bytes]] = {db: [] for db in databases.keys()}
+
+        def flush_chunk(db_name: str) -> None:
+            if chunks[db_name]:
+                output_handles[db_name].writelines(chunks[db_name])
+                chunks[db_name].clear()
 
         try:
             seq_count = 0
@@ -116,65 +102,49 @@ class DatabaseFASTAProcessor:
                     seq_count += 1
                     if seq_count % 500000 == 0:
                         logger.info(f"Processed {seq_count:,} sequences")
-
-                    # Skip records with no sequence
                     sequence = record.sequence
                     if sequence is None:
                         continue
-
-                    # Early length check before any other processing
                     if len(sequence) < self._min_length:
                         continue
-
                     header = self._get_header(record)
                     marker, taxon, output_header = self.header_processor(header)
-
-                    # Find matching databases first
                     matching_dbs = self._find_matching_databases(marker, databases)
                     if not matching_dbs:
                         continue
-
-                    # Lazy hash computation - only compute if we have matches and are deduplicating
                     seq_hash: str | None = None
                     if self._deduplicate:
                         seq_hash = self._compute_sequence_hash(sequence)
-
-                    # Write to appropriate database files
                     for db_name in matching_dbs:
                         db_seen = seen_sequences[db_name] if seen_sequences else None
-
-                        # Check for duplicates
                         if seq_hash is not None and self._is_duplicate(
                             seq_hash, db_seen
                         ):
                             continue
-
-                        # Track this sequence as seen
                         if (
                             self._deduplicate
                             and seen_sequences is not None
                             and seq_hash is not None
                         ):
                             seen_sequences[db_name].add(seq_hash)
-
                         record_counts[db_name] += 1
-                        self._write_fasta_record(
-                            output_handles[db_name], output_header, sequence
+                        chunks[db_name].append(
+                            f">{output_header}\n{sequence}\n".encode()
                         )
-
+                        if len(chunks[db_name]) >= 100_000:
+                            flush_chunk(db_name)
         except IOError as e:
             raise IOError(f"Error processing {fasta.name}: {e}") from e
-
         finally:
+            for db_name in databases.keys():
+                flush_chunk(db_name)
             for handle in output_handles.values():
                 handle.close()
 
-        # Log databases with no records
         for db, count in record_counts.items():
             if count == 0:
                 logger.warning(f"No records found for {db}")
 
-        # Build output dictionary with only databases that have records
         return {
             db: {
                 **databases[db],

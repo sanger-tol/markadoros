@@ -1,7 +1,7 @@
 from pathlib import Path
 
-import pgzip
 import pysam
+from isal import igzip
 from loguru import logger
 
 from markadoros.utils import get_simple_name
@@ -19,56 +19,71 @@ class ReadPreprocessor:
 
         self.threads = threads
 
-    def _preprocess_reads_cram(self, input: Path, nreads: int | None = None) -> Path:
+    def _preprocess_reads_sam(
+        self, input: Path, nreads: int | None = None, mode: str = "cram"
+    ) -> Path:
         """
-        Read a CRAM file, and write out nreads reads to an interleaved FASTQ file.
+        Read a BAM/CRAM file, and write out nreads reads to an interleaved FASTQ file.
         """
-        count = 0
         outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
+        read_mode = "rc" if mode == "cram" else "rb"
+        sam = pysam.AlignmentFile(
+            str(input), read_mode, check_sq=False, require_index=True
+        )
 
-        cram = pysam.AlignmentFile(str(input), "rc", check_sq=False, require_index=True)
-        with pgzip.open(
-            outfile, "wb", thread=self.threads, blocksize=2 * 10**8
-        ) as writer:
-            for read in cram.fetch("."):
-                count += 1
-                if nreads is not None and count > nreads:
+        with igzip.open(outfile, "wb") as fout:
+            collected = []
+            for count, read in enumerate(sam.fetch(".")):
+                if nreads is not None and count >= nreads:
                     break
-
                 name_suffix = "/1" if read.is_read1 else "/2"
-                writer.write(f"@{read.query_name}{name_suffix}\n".encode("utf-8"))
-                writer.write(f"{read.query_sequence}\n".encode("utf-8"))
-                writer.write("+\n".encode("utf-8"))
-                if read.query_qualities is not None:
-                    writer.write(
-                        f"{''.join(chr(q + 33) for q in read.query_qualities)}\n".encode(
-                            "utf-8"
-                        )
+                quals = (
+                    bytes(q + 33 for q in read.query_qualities)
+                    if read.query_qualities is not None
+                    else b"+"
+                )
+                collected.append(
+                    f"@{read.query_name}{name_suffix}\n{read.query_sequence}\n+\n".encode(
+                        "utf-8"
                     )
-                else:
-                    writer.write("+\n".encode("utf-8"))
+                    + quals
+                    + b"\n"
+                )
+                if len(collected) >= 100_000:
+                    fout.writelines(collected)
+                    collected.clear()
+            if collected:
+                fout.writelines(collected)
 
-        cram.close()
-
+        sam.close()
         return outfile
 
     def _preprocess_reads_fastx(self, input: Path, nreads: int | None = None):
-        """
-        Read a FastQ file and write out the first N reads
-        """
-        outfile = self.outdir / f"{get_simple_name(input)}.subsampled.fastq.gz"
+        is_fastq = input.suffix in (".fastq", ".fq") or str(input).endswith(".fastq.gz")
+        out_ext = "fastq" if is_fastq else "fasta"
+        outfile = self.outdir / f"{get_simple_name(input)}.subsampled.{out_ext}.gz"
 
-        with (
-            pysam.FastxFile(str(input)) as fin,
-            pgzip.open(
-                outfile, mode="wb", thread=self.threads, blocksize=2 * 10**8
-            ) as writer,
-        ):
-            for i, entry in enumerate(fin):
-                if nreads is not None and i >= nreads:
-                    break
+        in_opener = igzip.open if str(input).endswith(".gz") else open
 
-                writer.write((str(entry) + "\n").encode("utf-8"))
+        with in_opener(input, "rb") as fin, igzip.open(outfile, "wb") as fout:
+            if is_fastq:
+                collected = []
+                lines_needed = nreads * 4 if nreads is not None else float("inf")
+                for line in fin:
+                    collected.append(line)
+                    if len(collected) >= lines_needed:
+                        break
+                fout.writelines(collected)
+            else:
+                count = 0
+                collected = []
+                for line in fin:
+                    if line[0:1] == b">":
+                        if nreads is not None and count == nreads:
+                            break
+                        count += 1
+                    collected.append(line)
+                fout.writelines(collected)
 
         return outfile
 
@@ -99,7 +114,7 @@ class ReadPreprocessor:
         read_limit = "all" if n_reads is None else f"first {n_reads}"
         logger.info(f"{action} {read_limit} reads from {input_file.name}")
 
-        if file_key == ".cram":
-            return self._preprocess_reads_cram(input_file, n_reads)
+        if file_key == ".cram" or file_key == ".bam":
+            return self._preprocess_reads_sam(input_file, n_reads)
         else:
             return self._preprocess_reads_fastx(input_file, n_reads)

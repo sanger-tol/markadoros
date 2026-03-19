@@ -22,6 +22,8 @@ from markadoros.utils import extract_subsequence
 if TYPE_CHECKING:
     from markadoros.assembler_runners import AssemblerRunner
 
+from pymmseqs.config import TouchDBConfig as MMSeqs2TouchDBConfig
+
 
 class SearchPipeline:
     """Orchestrates the barcode search workflow.
@@ -34,16 +36,20 @@ class SearchPipeline:
     def __init__(
         self,
         outdir: Path,
+        tmpdir: Path,
         threads: int,
         database_index: dict[str, dict],
+        db_to_tmpdir: bool,
         input_type: InputType,
         expected_taxon: str | None,
         min_seq_id: float,
         min_aln_len: int,
     ):
         self.outdir = Path(outdir)
+        self.tmpdir = Path(tmpdir)
         self.threads = threads
         self.database_index = database_index
+        self.db_to_tmpdir = db_to_tmpdir
         self.input_type = input_type
         self.expected_taxon = expected_taxon
         self.min_seq_id = min_seq_id
@@ -68,19 +74,26 @@ class SearchPipeline:
 
     def _prepare_workspace(self) -> None:
         """Prepare the workspace, cleaning up any leftover tmpdir from previous runs."""
-        tmpdir = self.outdir / "tmp"
-        if tmpdir.exists():
-            logger.warning(f"Cleaning up existing tmpdir from previous run: {tmpdir}")
-            shutil.rmtree(tmpdir)
+        if self.tmpdir.exists():
+            logger.warning(
+                f"Cleaning up existing tmpdir from previous run: {self.tmpdir}"
+            )
+            shutil.rmtree(self.tmpdir)
+            self.tmpdir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.tmpdir.mkdir(parents=True, exist_ok=True)
 
     def _print_result_summary(self, result: pd.DataFrame) -> None:
         """Print a summary of the top search result."""
         if result.empty:
             return
 
-        out = result.head(1).reset_index()
+        if self.expected_taxon and self.expected_taxon in result["taxon"].values:
+            out = result[result["taxon"] == self.expected_taxon].head(1).reset_index()
+        else:
+            out = result.head(1).reset_index()
         for _, row in out.iterrows():
-            logger.info(f"""
+            logger.info(f"""\n
             \tcontig: {row["target"]}
             \tmatch_id: {row["seq_id"]}
             \tmatch_taxon: {row["taxon"]}
@@ -89,15 +102,12 @@ class SearchPipeline:
             \tcoverage: {row["coverage"]}x
             """)
 
-    def _filter_databases(self, db_name: str | None = None) -> dict:
+    def _filter_databases(self, db_name: str) -> tuple[str, dict]:
         """Filter databases to search."""
-        if db_name is None:
-            return self.database_index
-
         if db_name not in self.database_index:
             raise ValueError(f"Database {db_name} not found in index!")
 
-        return {db_name: self.database_index[db_name]}
+        return db_name, self.database_index[db_name]
 
     def _process_results(
         self,
@@ -180,6 +190,12 @@ class SearchPipeline:
         ## Tally the number of hits per taxon
         found_taxon_counts = result["taxon"].value_counts()
 
+        ## Top result - if expected taxon found, top result for taxon, otherwise overall top result
+        if self.expected_taxon and self.expected_taxon in found_taxon_counts:
+            top_result = result[result["taxon"] == self.expected_taxon].iloc[0]
+        else:
+            top_result = result.iloc[0]
+
         ## Summary for each taxon
         taxon_summary = {}
         for taxon in found_taxon_counts.index:
@@ -229,6 +245,7 @@ class SearchPipeline:
         summary = {
             "n_contigs_with_hits": int(result["target"].nunique()),
             "n_expected_taxon_sequences": expected_taxon_counts_in_result,
+            "top_result": top_result,
             "taxon_summary": taxon_summary,
         }
 
@@ -261,6 +278,19 @@ class SearchPipeline:
         with gzip.open(taxon_json, "rt", encoding="utf-8") as f:
             data = json.load(f)
             return data.get(self.expected_taxon, 0)
+
+    def _setup_database(self, db: Path, prefix: str) -> Path:
+        """
+        Copy database to tmpdir to avoid overuse of disk
+        """
+        out_db_path = self.tmpdir / "marker_db" / db.parent.name
+        out_db_path.mkdir(parents=True, exist_ok=True)
+
+        for file in db.parent.glob("*"):
+            if not file.is_dir():
+                shutil.copy2(file, out_db_path / file.name)
+
+        return (out_db_path / db.name).resolve()
 
     def _get_contig_stats(self, contigs: Path) -> dict[str, int]:
         """Calculate assembly statistics from contigs.
@@ -295,10 +325,6 @@ class SearchPipeline:
                 n50 = length
                 break
 
-        logger.info(
-            f"Assembly: {count} contigs (longest {longest}), with an N50 of {n50}"
-        )
-
         return {"n": count, "size": asm_size, "n50": n50, "longest": longest}
 
     def _setup_preprocessing(
@@ -312,15 +338,16 @@ class SearchPipeline:
         if self.input_type == InputType.CONTIGS or self.assembler is None:
             return None, None
 
-        preprocessor = ReadPreprocessor(self.outdir / "tmp")
+        preprocessor = ReadPreprocessor(self.tmpdir)
         subsampled_reads = preprocessor.preprocess_reads(input, n_reads)
 
         read_assembler = ReadAssembler(
             outdir=self.outdir,
-            tmpdir=self.outdir / "tmp",
+            tmpdir=self.tmpdir,
             threads=self.threads,
             prefix=prefix,
             assembler=self.assembler,
+            input_type=self.input_type,
         )
 
         return read_assembler, subsampled_reads
@@ -361,7 +388,7 @@ class SearchPipeline:
             DataFrame with search results, or None if search failed
         """
         contig_searcher = ContigSearcher(
-            tmpdir=self.outdir / "tmp",
+            tmpdir=self.tmpdir,
             threads=self.threads,
         )
 
@@ -399,6 +426,12 @@ class SearchPipeline:
         Returns:
             Processed results DataFrame, or None if no results found
         """
+        if self.db_to_tmpdir:
+            logger.info(f"Cloning database {db_name}...")
+            db_path = self._setup_database(Path(params["db"]), prefix)
+        else:
+            db_path = Path(params["db"])
+
         # Get taxon count expectation
         taxon_count = None
         if self.expected_taxon:
@@ -407,13 +440,7 @@ class SearchPipeline:
                 f"There are {taxon_count} possible records for {self.expected_taxon}!"
             )
 
-        # Get contigs (either from assembly or use input directly)
-        db = params.get("db")
-        if db is None:
-            logger.error(f"Database path not found in params for {db_name}!")
-            return None
-        db_path = Path(db)
-        marker = params.get("marker")
+        marker = params["marker"]
 
         n_aligned_reads, contigs = self._get_contigs(
             input=input,
@@ -426,6 +453,11 @@ class SearchPipeline:
         if contigs is None:
             logger.warning(f"No contigs available for {db_name}!")
             return None
+
+        contigs_stats = self._get_contig_stats(contigs)
+        logger.info(
+            f"Assembly: {contigs_stats['n']} contigs (longest {contigs_stats['longest']}), with an N50 of {contigs_stats['n50']}"
+        )
 
         # Search contigs against database
         result = self._search_contigs(
@@ -454,10 +486,10 @@ class SearchPipeline:
             result=result,
             taxon_count=taxon_count,
             marker=marker,
-            database=str(db_path),
+            database=str(params["db"]),
             n_reads=n_reads,
             n_aligned_reads=n_aligned_reads,
-            contig_stats=self._get_contig_stats(contigs),
+            contig_stats=contigs_stats,
         )
         self._save_summary(summary, prefix, marker)
 
@@ -466,10 +498,10 @@ class SearchPipeline:
     def run(
         self,
         input: Path,
+        db_name: str,
         n_reads: int | None = None,
-        db_name: str | None = None,
         prefix: str | None = None,
-    ) -> dict[str, pd.DataFrame]:
+    ) -> None:
         """Run the complete search pipeline.
 
         Args:
@@ -491,32 +523,27 @@ class SearchPipeline:
             input, n_reads, output_prefix
         )
 
-        # Determine which databases to search
-        databases = self._filter_databases(db_name)
+        # Extract relevant DB parameters
+        db_name, params = self._filter_databases(db_name)
 
-        # Process each database
-        results: dict[str, pd.DataFrame] = {}
-        for current_db_name, params in databases.items():
-            result = self._process_database(
-                db_name=current_db_name,
-                params=params,
-                input=input,
-                read_assembler=read_assembler,
-                subsampled_reads=subsampled_reads,
-                prefix=output_prefix,
-                n_reads=n_reads,
-            )
+        result = self._process_database(
+            db_name=db_name,
+            params=params,
+            input=input,
+            read_assembler=read_assembler,
+            subsampled_reads=subsampled_reads,
+            prefix=output_prefix,
+            n_reads=n_reads,
+        )
 
-            if result is not None:
-                results[current_db_name] = result
+        if result is None:
+            return None
 
-        # Display results summary
-        for result_db_name, result in results.items():
-            logger.info(f"Top result for {result_db_name}:")
-            self._print_result_summary(result)
+        logger.info(f"Top result for {db_name}:")
+        self._print_result_summary(result)
 
-        return results
+        return None
 
     def cleanup(self) -> None:
         """Remove temporary files."""
-        shutil.rmtree(self.outdir / "tmp")
+        shutil.rmtree(self.tmpdir)

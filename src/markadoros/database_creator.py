@@ -21,6 +21,7 @@ class DatabaseCreator:
         cluster_min_seq_id: float = 0.99,
         cluster_coverage: float = 0.8,
         min_length: int = 200,
+        create_index: bool = False,
         threads: int = 1,
     ) -> None:
         # Stage output directory
@@ -54,6 +55,7 @@ class DatabaseCreator:
             cluster=cluster,
             cluster_perc_id=cluster_min_seq_id,
             cluster_coverage=cluster_coverage,
+            create_index=create_index,
         )
         self._db_index = DatabaseIndex(self._outdir / "db.json")
 
@@ -72,19 +74,16 @@ class DatabaseCreator:
 
         # Build MMSeqs database for each non-empty FASTA output processed
         for database, params in processed_dict.items():
-            db_path, taxon_db_path = self._db_builder.build(database, params)
+            params = self._db_builder.build(database, params)
 
             # Add the database path and build FASTA to the db dict, and
             # remove the temporary FASTA file from it
             db_entry = {
                 **params,
-                "db": str(db_path.resolve()),
-                "taxon_db": str(taxon_db_path.resolve()),
                 "built_from": str(fasta.resolve()),
                 "deduplicated": self.deduplicate,
                 "clustered": self.cluster,
             }
-            db_entry.pop("processed_fasta", None)
 
             # Add the database entry to the index
             self._db_index.add_entry(database, db_entry)

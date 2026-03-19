@@ -22,6 +22,7 @@ class MMSeqsDatabaseBuilder:
         threads: int = 1,
         cluster_perc_id: float = 0.99,
         cluster_coverage: float = 0.8,
+        create_index: bool = False,
     ):
         self._outdir = outdir
         self._tmpdir = tmpdir
@@ -29,6 +30,7 @@ class MMSeqsDatabaseBuilder:
         self._cluster = cluster
         self._cluster_perc_id = cluster_perc_id
         self._cluster_coverage = cluster_coverage
+        self._create_index = create_index
 
     def _create_db(self, db_path: Path, fasta_file: Path) -> None:
         """Create MMSeqs2 database from FASTA file."""
@@ -41,7 +43,13 @@ class MMSeqsDatabaseBuilder:
             )
             db_config.run()
 
-    def _cluster_db(self, fasta_file: Path, cluster_prefix: Path) -> Path:
+    def _cluster_db(
+        self,
+        fasta_file: Path,
+        cluster_prefix: Path,
+        cluster_perc_id: float,
+        cluster_coverage: float,
+    ) -> Path:
         """Cluster Fasta file."""
         with redirect_stdout(io.StringIO()):
             cluster_config = MMSeqsEasyLinClustConfig(
@@ -49,8 +57,8 @@ class MMSeqsDatabaseBuilder:
                 cluster_prefix=cluster_prefix.resolve(),
                 tmp_dir=self._tmpdir.resolve(),
                 threads=self.threads,
-                min_seq_id=self._cluster_perc_id,
-                c=self._cluster_coverage,
+                min_seq_id=cluster_perc_id,
+                c=cluster_coverage,
             )
             cluster_config.run()
 
@@ -90,26 +98,34 @@ class MMSeqsDatabaseBuilder:
         with gzip.open(taxon_index_path, "wt") as f:
             json.dump(taxon_index, f, indent=2)
 
-    def build(self, database: str, params: dict) -> tuple[Path, Path]:
+    def build(self, database: str, params: dict) -> dict[str, str]:
         """Build and index an MMSeqs2 database."""
-        db_path = self._outdir / database / "db"
-        taxon_db_path = self._outdir / database / "taxon.json.gz"
+        params["db"] = self._outdir / database / "db"
+        params["taxon_db"] = self._outdir / database / "taxon.json.gz"
 
         if self._cluster:
             logger.info(f"Clustering sequences for {database}...")
             cluster_prefix = self._tmpdir / (database + ".cluster")
-            params["processed_fasta"] = self._cluster_db(
-                fasta_file=params["processed_fasta"], cluster_prefix=cluster_prefix
+            db_input_fasta = self._cluster_db(
+                fasta_file=params["processed_fasta"],
+                cluster_prefix=cluster_prefix,
+                cluster_perc_id=self._cluster_perc_id,
+                cluster_coverage=self._cluster_coverage,
             )
+        else:
+            db_input_fasta = params["processed_fasta"]
 
         logger.info(f"Building MMSeqs2 database for {database}... ")
-        self._create_db(db_path, params["processed_fasta"])
+        self._create_db(params["db"], db_input_fasta)
 
-        logger.info(f"Indexing MMSeqs2 database for {database}... ")
-        self._index_db(db_path)
+        if self._create_index:
+            logger.info(f"Indexing MMSeqs2 database for {database}... ")
+            self._index_db(params["db"])
 
         logger.info(f"Counting taxa counts for {database}...")
         taxon_counts = self._count_taxa(params["processed_fasta"])
-        self._store_taxon_counts(taxon_db_path, taxon_counts)
+        self._store_taxon_counts(params["taxon_db"], taxon_counts)
 
-        return (db_path, taxon_db_path)
+        params.pop("processed_fasta")
+
+        return params
