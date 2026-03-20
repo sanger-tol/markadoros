@@ -190,9 +190,13 @@ class SearchPipeline:
 
         ## Top result - if expected taxon found, top result for taxon, otherwise overall top result
         if self.expected_taxon and self.expected_taxon in found_taxon_counts:
-            top_result = result[result["taxon"] == self.expected_taxon].iloc[0]
+            top_result = (
+                result[result["taxon"] == self.expected_taxon]
+                .iloc[0]
+                .to_dict(orient="records")
+            )
         else:
-            top_result = result.iloc[0]
+            top_result = result.iloc[0].to_dict(orient="records")
 
         ## Summary for each taxon
         taxon_summary = {}
