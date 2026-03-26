@@ -73,13 +73,13 @@ def cli():
     help="Cluster the database sequences with mmseqs linclust.",
 )
 @click.option(
-    "--cluster_min_seq_id",
+    "--cluster-min-seq-id",
     type=float,
     default=0.99,
     help="Percent identity at which to cluster sequences",
 )
 @click.option(
-    "--cluster_coverage",
+    "--cluster-coverage",
     type=float,
     default=0.8,
     help="Coverage overlap at which to cluster sequences",
@@ -247,21 +247,21 @@ def database(
     help="Copy the database to the tempdir. Can be useful if running multiple searches simultaneously on the same database, which can cause IO issues.",
 )
 @click.option(
-    "--min_seq_id",
+    "--min-seq-id",
     "-m",
     type=float,
     default=0.96,
     help="Minimum sequence ID required to report a hit.",
 )
 @click.option(
-    "--min_aln_len",
+    "--min-aln-len",
     "-l",
     type=int,
     default=450,
     help="Minimum alignment length required to report a hit.",
 )
 @click.option(
-    "--expected_taxon",
+    "--expected-taxon",
     type=str,
     help="The expected taxon binomial name.",
 )
