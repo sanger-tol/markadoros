@@ -34,8 +34,10 @@ class ReadAssembler:
     def _extract_reads(
         self, search_result: MMSeqsSearchParser, input_reads: Path, output_path: Path
     ) -> tuple[int, Path | None]:
-        """Extract aligned reads to file. Returns path to output file or None if no reads."""
+        """Extract aligned reads to file. Returns path to output file or None if no reads.
 
+        Supports both FASTA (>) and FASTQ (@) formats. Format is detected by the first character.
+        """
         with redirect_stdout(io.StringIO()):
             aligned_reads = set(search_result.to_pandas()["query"])
 
@@ -43,26 +45,98 @@ class ReadAssembler:
         in_opener = igzip.open if str(input_reads).endswith(".gz") else open
 
         with in_opener(input_reads, "rb") as fin, igzip.open(output_path, "wb") as fout:
+            # Detect format from first character
+            first_char = fin.read(1)
+            if not first_char:
+                return 0, None
+
+            is_fastq = first_char == b"@"
+
+            # Seek back to beginning for processing
+            fin.seek(0)
             collected = []
-            current_id = None
-            write_current = False
-            for line in fin:
-                if line[0:1] == b">":
-                    current_id = line[1:].split()[0].decode()
-                    write_current = current_id in aligned_reads
-                    if write_current:
-                        reads_extracted += 1
-                if write_current:
-                    collected.append(line)
-                    if len(collected) >= 100_000:
-                        fout.writelines(collected)
-                        collected.clear()
-            if collected:
-                fout.writelines(collected)
+
+            if is_fastq:
+                reads_extracted = self._extract_fastq_records(
+                    fin, fout, aligned_reads, collected
+                )
+            else:
+                reads_extracted = self._extract_fasta_records(
+                    fin, fout, aligned_reads, collected
+                )
 
         if reads_extracted == 0:
             return 0, None
+
         return reads_extracted, output_path
+
+    def _extract_fasta_records(
+        self, fin, fout, aligned_reads: set, collected: list
+    ) -> int:
+        """Extract FASTA records for reads in aligned_reads set."""
+        reads_extracted = 0
+        current_id = None
+        write_current = False
+
+        for line in fin:
+            if line[0:1] == b">":
+                current_id = line[1:].split()[0].decode()
+                write_current = current_id in aligned_reads
+                if write_current:
+                    reads_extracted += 1
+
+            if write_current:
+                collected.append(line)
+                if len(collected) >= 100_000:
+                    fout.writelines(collected)
+                    collected.clear()
+
+        if collected:
+            fout.writelines(collected)
+
+        return reads_extracted
+
+    def _extract_fastq_records(
+        self, fin, fout, aligned_reads: set, collected: list
+    ) -> int:
+        """Extract FASTQ records for reads in aligned_reads set.
+
+        FASTQ format: 4 lines per record
+        - Line 1: header starting with @
+        - Line 2: sequence
+        - Line 3: separator (usually +)
+        - Line 4: quality scores
+        """
+        reads_extracted = 0
+
+        while True:
+            # Read FASTQ record (4 lines)
+            header = fin.readline()
+            if not header:
+                break
+
+            seq = fin.readline()
+            sep = fin.readline()
+            qual = fin.readline()
+
+            if not all([header, seq, sep, qual]):
+                break
+
+            # Extract read ID from header (remove @ and split on whitespace)
+            read_id = header[1:].split()[0].decode()
+
+            if read_id in aligned_reads:
+                reads_extracted += 1
+                collected.extend([header, seq, sep, qual])
+
+                if len(collected) >= 100_000:
+                    fout.writelines(collected)
+                    collected.clear()
+
+        if collected:
+            fout.writelines(collected)
+
+        return reads_extracted
 
     def _filter_reads(
         self, input_reads: Path, marker: str, db: Path
@@ -80,9 +154,9 @@ class ReadAssembler:
             )
             db_config.run()
 
-        search_result_db = self.tmpdir / marker / "search_reads" / "db"
+        search_result_db = self.tmpdir / "search_reads" / "db"
         search_result_db.parent.mkdir(parents=True, exist_ok=True)
-        tmp_dir = self.tmpdir / marker / "mmseqs_tmp"
+        tmp_dir = self.tmpdir / "mmseqs_tmp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         with redirect_stdout(io.StringIO()):
@@ -94,7 +168,6 @@ class ReadAssembler:
                 search_type=3,
                 v=3,
                 threads=self.threads,
-                s=1,
                 max_seqs=50,
                 max_accept=1,
                 alignment_mode=1,
@@ -114,7 +187,7 @@ class ReadAssembler:
         n_extracted_reads, aligned_reads = self._extract_reads(
             reads_search,
             input_reads,
-            self.tmpdir / marker / f"{Path(input_reads).stem}.match.fq.gz",
+            self.tmpdir / f"{Path(input_reads).stem}.match.fq.gz",
         )
 
         return n_extracted_reads, aligned_reads
@@ -123,7 +196,7 @@ class ReadAssembler:
         """Assemble filtered reads into contigs."""
         contigs = self.assembler.assemble(
             aligned_reads,
-            self.tmpdir / marker / "assembly.out",
+            self.tmpdir / "assembly.out",
         )
 
         if not contigs or contigs.stat().st_size == 0:

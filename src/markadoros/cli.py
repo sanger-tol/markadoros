@@ -257,7 +257,7 @@ def database(
     "--min-aln-len",
     "-l",
     type=int,
-    default=450,
+    default=250,
     help="Minimum alignment length required to report a hit.",
 )
 @click.option(

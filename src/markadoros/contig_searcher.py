@@ -43,7 +43,7 @@ class ContigSearcher:
         logger.info(f"Searching for {marker} hits in assembled contigs...")
 
         # Create database from contigs
-        contigs_db = self.tmpdir / marker / "contigs" / "db"
+        contigs_db = self.tmpdir / "contigs" / "db"
         contigs_db.parent.mkdir(parents=True, exist_ok=True)
 
         with redirect_stdout(io.StringIO()):
@@ -56,9 +56,9 @@ class ContigSearcher:
             db_config.run()
 
         # Search contigs against target database
-        alignment_db = self.tmpdir / marker / "search_contigs" / "db"
+        alignment_db = self.tmpdir / "search_contigs" / "db"
         alignment_db.parent.mkdir(parents=True, exist_ok=True)
-        tmp_dir = self.tmpdir / marker / "mmseqs_tmp"
+        tmp_dir = self.tmpdir / "mmseqs_tmp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         with redirect_stdout(io.StringIO()):
