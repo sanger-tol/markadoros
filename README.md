@@ -82,14 +82,14 @@ markadoros database -x bold \
 
 **Additional options:**
 
-- `-x, --header-type <type>` - Use a preset header processor: `bold` or `unite`.
+- `-x, --header-type <type>` - Use a preset header processor: `bold`, `unite`, `silva_lsu`, `silva_ssu`.
 - `--min-length <N>` - Minimum sequence length to retain (default: 200)
 - `--deduplicate/--no-deduplicate` - Deduplicate identical sequences. The first record for each identical sequence is kept. (default: deduplicate)
 - `--cluster/--no-cluster` - Cluster sequences using MMSeqs2's linear clustering algorithm (default: no cluster)
 - `--cluster_min_seq_id` - Cluster sequences at this percentage identity threshold (default: 0.99)
 - `--cluster_coverage` - Overlap between two sequences required for clustering (default: 0.8)
 - `--create-index/--no-create-index` - Create an MMSeqs2 index for each marker database. This may improve speed for larger databases, but can cause IO issues if multiple processes access the same database. (default: False)
-- `--skip-taxa` - New line-separated list of taxon names to skip.
+- `--exclude-file` - New line-separated list of regular expressions. If a header matches a regular expression it will be skipped.
 - `-o, --outdir <path>` - Output directory (default: `./markadoros.db`)
 - `--cleanup/--no-cleanup` - Clean up temporary files (default: cleanup)
 - `-t, --threads <N>` - Number of threads for MMSeqs2 (default: 1)
@@ -98,7 +98,9 @@ markadoros database -x bold \
 
 - `bold` - [BOLD Systems](https://www.boldsystems.org/) [general FASTA release](https://bench.boldsystems.org/index.php/datapackages/Latest)
 - `unite` - [UNITE](https://unite.ut.ee/) [general FASTA release](https://unite.ut.ee/repository.php)
-
+- `silva_lsu` - [SILVA](https://www.arb-silva.de/) [LSU Release](https://www.arb-silva.de/current-release/Exports)
+- `silva_ssu` - [SILVA](https://www.arb-silva.de/) [SSU Release](https://www.arb-silva.de/current-release/Exports)
+- 
 If your FASTA release does not conform to the above presets, omit the `-x` option. Your input FASTA headers must then be formatted as:
 
 ```

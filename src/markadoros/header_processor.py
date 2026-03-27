@@ -26,7 +26,7 @@ def process_bold_header(header: str) -> tuple[str, str, str]:
     else:
         taxon = filtered[-1] if filtered else "NA"
 
-    return marker, taxon.replace("_", " "), "|".join([seq_id, marker, taxon, lineage])
+    return marker, taxon, "|".join([seq_id, marker, taxon, lineage])
 
 
 def process_unite_header(header: str) -> tuple[str, str, str]:
@@ -41,7 +41,29 @@ def process_unite_header(header: str) -> tuple[str, str, str]:
     lineage = split_header[4]
     taxon = split_header[0]
 
-    return marker, taxon.replace("_", " "), "|".join([seq_id, marker, taxon, lineage])
+    return marker, taxon, "|".join([seq_id, marker, taxon, lineage])
+
+
+def process_silva_lsu_header(header: str) -> tuple[str, str, str]:
+    """Process a SILVA FASTA header and return the new FASTA header."""
+    split_header = header.split(" ", 1)
+    seq_id = split_header[0]
+    marker = "LSU"
+    lineage = split_header[1]
+    taxon = [x for x in lineage.split(";") if x is not None][-1]
+
+    return marker, taxon, "|".join([seq_id, marker, taxon, lineage])
+
+
+def process_silva_ssu_header(header: str) -> tuple[str, str, str]:
+    """Process a SILVA FASTA header and return the new FASTA header."""
+    split_header = header.split(" ", 1)
+    seq_id = split_header[0]
+    marker = "SSU"
+    lineage = split_header[1]
+    taxon = lineage.split(";")[-1]
+
+    return marker, taxon, "|".join([seq_id, marker, taxon, lineage])
 
 
 def process_generic_header(header: str) -> tuple[str, str, str]:

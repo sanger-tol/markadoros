@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -21,7 +22,7 @@ class DatabaseFASTAProcessor:
         tmpdir: Path | None = None,
         min_length: int = 200,
         threads: int = 0,
-        skip_taxa: Path | None = None,
+        exclude_file: Path | None = None,
     ):
         self._deduplicate = deduplicate
         self._min_length = min_length
@@ -34,16 +35,23 @@ class DatabaseFASTAProcessor:
         else:
             self.header_processor = header_processor
 
-        self._skip_taxa = self._get_skip_taxa(skip_taxa)
+        self._exclusions = self._compile_exclusions(exclude_file)
 
-    def _get_skip_taxa(self, skip_taxa_file: Path | None) -> set:
+    def _compile_exclusions(self, skip_taxa_file: Path | None) -> list:
         """
         Get the set of taxa to skip from a file.
         """
         if skip_taxa_file is None:
-            return set()
+            return []
+
         with open(skip_taxa_file, "r") as f:
-            return set(line.strip() for line in f if line.strip())
+            patterns = []
+            for line in f:
+                pattern = line.strip()
+                if not pattern or pattern.startswith("#"):
+                    continue
+                patterns.append(re.compile(pattern))
+            return patterns
 
     def _get_canonical_sequence(self, seq: str) -> str:
         """
@@ -73,9 +81,9 @@ class DatabaseFASTAProcessor:
         if record.comment is None:
             header = record.name
         else:
-            header = "_".join([record.name, record.comment])
+            header = " ".join([record.name, record.comment])
 
-        return header.replace(" ", "_")
+        return header
 
     def _find_matching_databases(
         self, marker: str, databases: dict[str, dict[str, str]]
@@ -125,7 +133,7 @@ class DatabaseFASTAProcessor:
                     header = self._get_header(record)
                     marker, taxon, output_header = self.header_processor(header)
 
-                    if taxon in self._skip_taxa:
+                    if any(pattern.search(header) for pattern in self._exclusions):
                         continue
 
                     matching_dbs = self._find_matching_databases(marker, databases)

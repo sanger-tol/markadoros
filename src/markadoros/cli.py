@@ -11,6 +11,8 @@ from markadoros.database_creator import DatabaseCreator
 from markadoros.header_processor import (
     process_bold_header,
     process_generic_header,
+    process_silva_lsu_header,
+    process_silva_ssu_header,
     process_unite_header,
 )
 from markadoros.input_types import get_valid_input_types, normalize_input_type
@@ -37,7 +39,7 @@ def cli():
 @click.option(
     "--header-type",
     "-x",
-    type=click.Choice(["bold", "unite"]),
+    type=click.Choice(["bold", "unite", "silva_lsu", "silva_ssu"]),
     help="Use a preset header processor to generate databases.",
     default=None,
 )
@@ -91,9 +93,9 @@ def cli():
     help="Create MMSeqs2 indexes for each marker database.",
 )
 @click.option(
-    "--skip-taxa",
+    "--exclude-file",
     type=click.Path(exists=True),
-    help="New-line separated file of taxa to skip when building a database.",
+    help="New-line separated file of regular expressions to exclude header matches from the output database.",
 )
 @click.option(
     "--outdir",
@@ -130,7 +132,7 @@ def database(
     outdir: str,
     threads: int,
     cleanup: bool,
-    skip_taxa: str | None,
+    exclude_file: str | None,
 ):
     """
     Build MMSeqs2 databases from a FASTA file, and record their parameters.
@@ -157,6 +159,20 @@ def database(
                 "--header-type is unite! All --marker specifications are ignored and 'ITS' is forced!"
             )
         marker = ["ITS"]
+    elif header_type == "silva_lsu":
+        header_processor = process_silva_lsu_header
+        marker = ["LSU"]
+        if marker is not None:
+            logger.warning(
+                "--header-type is silva_lsu! All --marker specifications are ignored and 'LSU' is forced!"
+            )
+    elif header_type == "silva_ssu":
+        header_processor = process_silva_ssu_header
+        marker = ["SSU"]
+        if marker is not None:
+            logger.warning(
+                "--header-type is silva_ssu! All --marker specifications are ignored and 'SSU' is forced!"
+            )
     else:
         header_processor = process_generic_header
 
@@ -170,7 +186,7 @@ def database(
         create_index=create_index,
         min_length=min_length,
         threads=threads,
-        skip_taxa=Path(skip_taxa) if skip_taxa else None,
+        exclude_file=Path(exclude_file) if exclude_file else None,
     )
     database_creator.create_marker_database(
         fasta=Path(fasta),

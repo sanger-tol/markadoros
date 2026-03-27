@@ -85,11 +85,16 @@ class MMSeqsDatabaseBuilder:
         taxon_counts = {}
         with pysam.FastxFile(str(db_path)) as fasta:
             for record in fasta:
-                if record.name is not None:
-                    taxon = record.name.split("|")[2].replace("_", " ")
-                else:
+                if record.name is None:
                     continue
+                elif record.comment is None:
+                    header = record.name
+                else:
+                    header = " ".join([record.name, record.comment])
+
+                taxon = header.split("|")[2]
                 taxon_counts[taxon] = taxon_counts.get(taxon, 0) + 1
+
         return taxon_counts
 
     def _store_taxon_counts(
@@ -123,7 +128,7 @@ class MMSeqsDatabaseBuilder:
             self._index_db(params["db"])
 
         logger.info(f"Counting taxa counts for {database}...")
-        taxon_counts = self._count_taxa(params["processed_fasta"])
+        taxon_counts = self._count_taxa(db_input_fasta)
         self._store_taxon_counts(params["taxon_db"], taxon_counts)
 
         params.pop("processed_fasta")
