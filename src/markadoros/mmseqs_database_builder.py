@@ -81,7 +81,8 @@ class MMSeqsDatabaseBuilder:
             )
             index_config.run()
 
-    def _count_taxa(self, db_path: Path) -> dict[str, int]:
+    def _count_records(self, db_path: Path) -> tuple[int, dict[str, int]]:
+        record_counts = 0
         taxon_counts = {}
         with pysam.FastxFile(str(db_path)) as fasta:
             for record in fasta:
@@ -92,12 +93,13 @@ class MMSeqsDatabaseBuilder:
                 else:
                     header = " ".join([record.name, record.comment])
 
-                taxon = header.split("|")[2]
+                record_counts += 1
+                taxon = header.split("|")[2].replace("_", " ")
                 taxon_counts[taxon] = taxon_counts.get(taxon, 0) + 1
 
-        return taxon_counts
+        return record_counts, taxon_counts
 
-    def _store_taxon_counts(
+    def _write_taxon_counts(
         self, taxon_index_path: Path, taxon_index: dict[str, int]
     ) -> None:
         with gzip.open(taxon_index_path, "wt") as f:
@@ -127,9 +129,10 @@ class MMSeqsDatabaseBuilder:
             logger.info(f"Indexing MMSeqs2 database for {database}... ")
             self._index_db(params["db"])
 
-        logger.info(f"Counting taxa counts for {database}...")
-        taxon_counts = self._count_taxa(db_input_fasta)
-        self._store_taxon_counts(params["taxon_db"], taxon_counts)
+        logger.info(f"Counting records for {database}...")
+        record_counts, taxon_counts = self._count_records(db_input_fasta)
+        params["n_seqs"] = record_counts
+        self._write_taxon_counts(params["taxon_db"], taxon_counts)
 
         params.pop("processed_fasta")
 

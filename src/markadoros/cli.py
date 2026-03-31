@@ -32,22 +32,20 @@ def cli():
         format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
         level="INFO",
     )
-    set_mmseqs_path()
 
 
 @cli.command()
 @click.option(
     "--header-type",
     "-x",
-    type=click.Choice(["bold", "unite", "silva_lsu", "silva_ssu"]),
+    type=click.Choice(["bold", "unite", "silva_lsu", "silva_ssu", "generic"]),
     help="Use a preset header processor to generate databases.",
-    default=None,
+    default="generic",
 )
 @click.option(
     "--marker",
     type=str,
-    help="The name of a marker gene to find in the input FASTA. Can be specified multiple times for each marker present in the data. Required unless `--header-type` is `unite`.",
-    multiple=True,
+    help="The name of the input marker gene. Required if --header-type is `generic`.",
     required=False,
 )
 @click.option(
@@ -65,13 +63,13 @@ def cli():
 @click.option(
     "--deduplicate/--no-deduplicate",
     is_flag=True,
-    default=True,
+    default=False,
     help="Whether to deduplicate sequences in the output database.",
 )
 @click.option(
     "--cluster/--no-cluster",
     is_flag=True,
-    default=True,
+    default=False,
     help="Cluster the database sequences with mmseqs linclust.",
 )
 @click.option(
@@ -140,6 +138,7 @@ def database(
     FASTA: Path to the FASTA file to build the database from.
     """
     start_time = time.perf_counter()
+    set_mmseqs_path()
 
     logger.add(
         str(Path(outdir).resolve() / "markadoros.database.log"),
@@ -147,34 +146,24 @@ def database(
         level="INFO",
     )
 
-    if marker is None and header_type != "unite":
-        raise click.UsageError("--marker is required when --header-type is not 'unite'")
-
     if header_type == "bold":
         header_processor = process_bold_header
+        marker = ["COI", "CYTB", "rbcL", "matK", "18S", "28S"]
     elif header_type == "unite":
         header_processor = process_unite_header
-        if marker is not None:
-            logger.warning(
-                "--header-type is unite! All --marker specifications are ignored and 'ITS' is forced!"
-            )
         marker = ["ITS"]
     elif header_type == "silva_lsu":
         header_processor = process_silva_lsu_header
         marker = ["LSU"]
-        if marker is not None:
-            logger.warning(
-                "--header-type is silva_lsu! All --marker specifications are ignored and 'LSU' is forced!"
-            )
     elif header_type == "silva_ssu":
         header_processor = process_silva_ssu_header
         marker = ["SSU"]
-        if marker is not None:
-            logger.warning(
-                "--header-type is silva_ssu! All --marker specifications are ignored and 'SSU' is forced!"
-            )
     else:
         header_processor = process_generic_header
+
+    logger.info(
+        f"--header-type is {header_type}! Setting marker to {', '.join(marker)}!"
+    )
 
     database_creator = DatabaseCreator(
         outdir=Path(outdir),
@@ -281,6 +270,12 @@ def database(
     type=str,
     help="The expected taxon binomial name.",
 )
+@click.option(
+    "--save-contigs",
+    is_flag=True,
+    default=False,
+    help="Clean up temporary files after database creation.",
+)
 @click.argument(
     "input",
     type=click.Path(exists=True),
@@ -298,6 +293,7 @@ def search(
     db: str,
     db_to_tmpdir: bool,
     cleanup: bool,
+    save_contigs: bool,
     input: str,
 ):
     """Search reads or contigs against a marker database.
@@ -305,6 +301,7 @@ def search(
     INPUT: Path to reads file (FASTX or CRAM) or contigs file (FASTA).
     """
     start_time = time.perf_counter()
+    set_mmseqs_path()
 
     # Load and validate database
     try:
@@ -332,6 +329,7 @@ def search(
         expected_taxon=expected_taxon,
         min_seq_id=min_seq_id,
         min_aln_len=min_aln_len,
+        save_contigs=save_contigs,
     )
     pipeline.run(
         input=Path(input),

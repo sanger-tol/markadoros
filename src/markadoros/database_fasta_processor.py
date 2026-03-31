@@ -182,7 +182,6 @@ class DatabaseFASTAProcessor:
             db: {
                 **databases[db],
                 "processed_fasta": (self._tmpdir / f"{db}.fa.gz").resolve(),
-                "n_seqs": record_counts[db],
             }
             for db in databases.keys()
             if record_counts[db] > 0

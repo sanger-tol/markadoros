@@ -17,14 +17,12 @@ class ReadAssembler:
 
     def __init__(
         self,
-        outdir: Path,
         tmpdir: Path,
         threads: int,
         prefix: str,
         assembler: AssemblerRunner,
         input_type: InputType,
     ):
-        self.outdir = Path(outdir)
         self.tmpdir = Path(tmpdir)
         self.threads = threads
         self.prefix = prefix

@@ -42,6 +42,7 @@ class SearchPipeline:
         expected_taxon: str | None,
         min_seq_id: float,
         min_aln_len: int,
+        save_contigs: bool,
     ):
         self.outdir = Path(outdir)
         self.tmpdir = Path(tmpdir)
@@ -52,6 +53,7 @@ class SearchPipeline:
         self.expected_taxon = expected_taxon
         self.min_seq_id = min_seq_id
         self.min_aln_len = min_aln_len
+        self.save_contigs = save_contigs
 
         # Initialize assembler based on platform
         assembler: AssemblerRunner | None
@@ -342,7 +344,6 @@ class SearchPipeline:
         subsampled_reads = preprocessor.preprocess_reads(input, n_reads)
 
         read_assembler = ReadAssembler(
-            outdir=self.outdir,
             tmpdir=self.tmpdir,
             threads=self.threads,
             prefix=prefix,
@@ -453,6 +454,10 @@ class SearchPipeline:
         if contigs is None:
             logger.warning(f"No contigs available for {db_name}!")
             return None
+
+        if self.save_contigs and contigs is not None:
+            logger.info(f"Saving contigs to {self.outdir}/{prefix}.contigs.fasta")
+            shutil.copy(contigs, f"{self.outdir}/{prefix}.contigs.fasta")
 
         contigs_stats = self._get_contig_stats(contigs)
         logger.info(
