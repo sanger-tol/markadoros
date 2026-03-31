@@ -51,10 +51,10 @@ conda install -c bioconda mmseqs2 spades hifiasm
 
 ```bash
 # 1. Build a database from a BOLD release
-markadoros database -x bold --marker COI --marker rbcL --prefix BOLD --outdir db/ <bold_release.fasta.gz>
+markadoros database -x bold --prefix BOLD --cluster --outdir db/ <bold_release.fasta.gz>
 
 # 2. Search your reads
-markadoros search -x illumina --index db/db.json --db BOLD.COI <reads.fq.gz>
+markadoros search -x illumina -n 100000 --index db/db.json --db BOLD.COI <reads.fq.gz>
 
 # 3. Check results
 less reads.COI.summary.json
@@ -68,8 +68,6 @@ Use the `database` command to prepare marker gene sequences for searching:
 
 ```bash
 markadoros database -x bold \
-    --marker COI --marker rbcL --marker CYTB \
-    --marker matK --marker 18S --marker 28S \
     --prefix BOLD \
     --outdir db/ \
     /path/to/bold/release.fasta.gz
@@ -77,14 +75,14 @@ markadoros database -x bold \
 
 **Required options:**
 
-- `--marker <name>` - Marker gene name to extract from input FASTA. Can be specified multiple times for FASTAs containing multiple markers (e.g., `--marker COI-5P --marker ITS`). Inexact matches are allowed. Required unless `--header-type` is `unite`.
+- `-x, --header-type <type>` - Use a preset header processor: `bold`, `unite`, `silva_lsu`, `silva_ssu`, `generic`.
 - `--prefix <name>` - Prefix for output database names
 
 **Additional options:**
 
-- `-x, --header-type <type>` - Use a preset header processor: `bold`, `unite`, `silva_lsu`, `silva_ssu`.
+- `--marker <name>` - Only when using `--header-type` is `generic` - the name of the marker gene in the `marker` field of the FASTA header.
 - `--min-length <N>` - Minimum sequence length to retain (default: 200)
-- `--deduplicate/--no-deduplicate` - Deduplicate identical sequences. The first record for each identical sequence is kept. (default: deduplicate)
+- `--deduplicate/--no-deduplicate` - Deduplicate identical sequences. The first record for each identical sequence is kept. (default: false)
 - `--cluster/--no-cluster` - Cluster sequences using MMSeqs2's linear clustering algorithm (default: no cluster)
 - `--cluster_min_seq_id` - Cluster sequences at this percentage identity threshold (default: 0.99)
 - `--cluster_coverage` - Overlap between two sequences required for clustering (default: 0.8)
@@ -150,7 +148,8 @@ markadoros search -x illumina --index db/db.json reads.fq.gz
 - `-t, --threads <N>` - Number of threads (default: 1)
 - `-p, --prefix <name>` - Output file prefix (default: input filename)
 - `-o, --outdir <path>` - Output directory (default: current directory)
-
+- `--save-contigs` - Write the assembled contigs to disk in the output directory.
+ 
 **Output files:**
 
 - `<prefix>.<marker>.summary.json` - Results in JSON format
@@ -190,11 +189,8 @@ The search subtool outputs a JSON file summarising the search. It has the follow
 markadoros database \
     --header-type bold \
     --outdir db/ \
-    --marker COI --marker rbcL --marker CYTB \
-    --marker matK --marker 18S --marker 28S \
     --prefix BOLD \
     --cluster \
-    --no-deduplicate \
     --threads 16 \
     BOLD_Public.20-Feb-2026.fasta.gz
 ```
