@@ -98,8 +98,8 @@ markadoros database -x bold \
 - `unite` - [UNITE](https://unite.ut.ee/) [general FASTA release](https://unite.ut.ee/repository.php)
 - `silva_lsu` - [SILVA](https://www.arb-silva.de/) [LSU Release](https://www.arb-silva.de/current-release/Exports)
 - `silva_ssu` - [SILVA](https://www.arb-silva.de/) [SSU Release](https://www.arb-silva.de/current-release/Exports)
-- 
-If your FASTA release does not conform to the above presets, omit the `-x` option. Your input FASTA headers must then be formatted as:
+
+If your FASTA release does not conform to the above presets, set `-x` to `generic`. Your input FASTA headers must then be formatted as:
 
 ```
 ><unique_id>|<marker>|<taxon_name>|<lineage>
