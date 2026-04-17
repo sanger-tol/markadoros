@@ -28,6 +28,11 @@ class AssemblerRunner(ABC):
         """Return the path to the output assembly file."""
         pass
 
+    @abstractmethod
+    def _get_version(self) -> str:
+        """Return the path to the output assembly file."""
+        pass
+
     def _process_contigs(self, contigs: Path) -> Path:
         return contigs
 
@@ -81,6 +86,7 @@ class AssemblerRunner(ABC):
 class SpadesRunner(AssemblerRunner):
     def __init__(self, threads: int, rna: bool = False):
         self.rna = rna
+        self.name = "SPAdes"
         super().__init__(threads)
 
     def _check_install(self) -> None:
@@ -111,6 +117,18 @@ class SpadesRunner(AssemblerRunner):
         ]
         return [arg for arg in command if arg]
 
+    def _get_version(self) -> str:
+        """Return the SPAdes version."""
+        result = subprocess.run(
+            ["spades.py", "--version"], capture_output=True, text=True
+        )
+        match = re.search(r"SPAdes genome assembler v(\S+)", result.stdout.strip())
+        if match is None:
+            logger.warning("Could not extract SPAdes version from output")
+            return ""
+
+        return match.group(1)
+
     def _get_output_file(self, outdir: Path) -> Path:
         """Return the SPAdes output file path."""
         spades_contigs = (
@@ -122,6 +140,7 @@ class SpadesRunner(AssemblerRunner):
 class HifiasmRunner(AssemblerRunner):
     def __init__(self, threads: int, ont: bool = False):
         self.ont = ont
+        self.name = "hifiasm"
         super().__init__(threads)
 
     def _check_install(self) -> None:
@@ -153,6 +172,14 @@ class HifiasmRunner(AssemblerRunner):
         ]
 
         return [arg for arg in command if arg]
+
+    def _get_version(self) -> str:
+        """Return the hifiasm version."""
+        version = subprocess.run(
+            ["hifiasm", "--version"], capture_output=True, text=True
+        ).stdout.strip()
+
+        return version
 
     def _process_contigs(self, contigs: Path) -> Path:
         outfile = self._gfa_to_fasta(contigs)

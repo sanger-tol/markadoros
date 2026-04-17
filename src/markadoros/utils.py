@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -94,6 +95,17 @@ def _check_mmseqs_binary(mmseqs_path: str) -> None:
         raise RuntimeError(f"mmseqs2 binary not found at {mmseqs_path}")
     except Exception as e:
         raise RuntimeError(f"Failed to check mmseqs2 binary at {mmseqs_path}: {e}")
+
+
+def get_mmseqs_version() -> str:
+    """
+    Return the mmseqs2 version from the binary.
+    """
+    match = re.search(
+        r"MMseqs2 Version: (\S+)",
+        subprocess.run("mmseqs", capture_output=True, text=True).stdout,
+    )
+    return match.group(1) if match else "unknown"
 
 
 def set_mmseqs_path() -> None:

@@ -9,6 +9,7 @@ from loguru import logger
 
 from markadoros.bold_tsv_processor import BoldTSVProcessor
 from markadoros.database_creator import DatabaseCreator
+from markadoros.goat_synonym_getter import GOATSynonymGetter
 from markadoros.header_processor import (
     process_bold_header,
     process_generic_header,
@@ -371,14 +372,27 @@ def bold_tsv_database(
 )
 @click.option(
     "--expected-taxon",
+    "-e",
     type=str,
     help="The expected taxon binomial name.",
+)
+@click.option(
+    "--find-goat-synonyms",
+    "-g",
+    is_flag=True,
+    default=False,
+    help="Find synonyms for the expected taxon on GoaT.",
+)
+@click.option(
+    "--synonyms",
+    "-s",
+    help="A comma-separated list of synonyms to check in addition to the expected taxon. If provided, GoaT lookup is disabled.",
 )
 @click.option(
     "--save-contigs",
     is_flag=True,
     default=False,
-    help="Clean up temporary files after database creation.",
+    help="Save the assembled contigs to file in the output directory.",
 )
 @click.argument(
     "input",
@@ -391,6 +405,8 @@ def search(
     prefix: str,
     nreads: int,
     expected_taxon: str,
+    find_goat_synonyms: bool,
+    synonyms: str,
     min_seq_id: float,
     min_aln_len: int,
     threads: int,
@@ -413,6 +429,15 @@ def search(
     except (FileNotFoundError, json.JSONDecodeError) as e:
         raise click.ClickException(f"Could not load database from {index}: {e}")
 
+    # Handle synonyms
+    if find_goat_synonyms and not synonyms:
+        goat_lookup = GOATSynonymGetter()
+        input_synonyms = goat_lookup.get_synonyms(expected_taxon)
+    elif synonyms:
+        input_synonyms = synonyms.split(",")
+    else:
+        input_synonyms = []
+
     # Normalize input type
     input_type = normalize_input_type(type)
 
@@ -431,6 +456,7 @@ def search(
         database_index=database_index,
         db_to_tmpdir=db_to_tmpdir,
         expected_taxon=expected_taxon,
+        synonyms=input_synonyms,
         min_seq_id=min_seq_id,
         min_aln_len=min_aln_len,
         save_contigs=save_contigs,

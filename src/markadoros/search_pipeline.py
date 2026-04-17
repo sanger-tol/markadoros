@@ -3,7 +3,9 @@ from __future__ import annotations
 import gzip
 import importlib.metadata
 import json
+import re
 import shutil
+import subprocess
 from math import floor
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,7 +19,7 @@ from markadoros.contig_searcher import ContigSearcher
 from markadoros.input_types import InputType
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.utils import extract_subsequence
+from markadoros.utils import extract_subsequence, get_mmseqs_version
 
 if TYPE_CHECKING:
     from markadoros.assembler_runners import AssemblerRunner
@@ -40,6 +42,7 @@ class SearchPipeline:
         db_to_tmpdir: bool,
         input_type: InputType,
         expected_taxon: str | None,
+        synonyms: list[str],
         min_seq_id: float,
         min_aln_len: int,
         save_contigs: bool,
@@ -51,6 +54,8 @@ class SearchPipeline:
         self.db_to_tmpdir = db_to_tmpdir
         self.input_type = input_type
         self.expected_taxon = expected_taxon
+        self.synonyms = synonyms
+        self.all_taxon_names = [expected_taxon] + synonyms if expected_taxon else []
         self.min_seq_id = min_seq_id
         self.min_aln_len = min_aln_len
         self.save_contigs = save_contigs
@@ -156,13 +161,28 @@ class SearchPipeline:
 
         if extract_coverage:
             result = result.sort_values(
-                by=["coverage", "fident", "alnlen"], ascending=False
+                by=["coverage", "target", "bits"], ascending=[False, True, False]
             )
         else:
             result = result.sort_values(by=["target", "bits"], ascending=[True, False])
 
+        if self.expected_taxon:
+            result["is_expected_taxon"] = result["taxon"].apply(
+                lambda taxon: "true"
+                if taxon == self.expected_taxon
+                else ("synonym" if taxon in self.synonyms else "false")
+            )
+
         # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
-        desired_cols = ["target", "coverage", "seq_id", "marker", "taxon", "lineage"]
+        desired_cols = [
+            "target",
+            "coverage",
+            "seq_id",
+            "marker",
+            "taxon",
+            "lineage",
+            "is_expected_taxon",
+        ]
 
         # Add remaining columns in their original order
         remaining_cols = [
@@ -176,7 +196,7 @@ class SearchPipeline:
         self,
         input: Path,
         result: pd.DataFrame,
-        taxon_count: int | None,
+        taxa_counts: dict[str, int] | None,
         marker: str | None,
         database: str,
         n_reads: int | None,
@@ -187,13 +207,26 @@ class SearchPipeline:
         Summarise a results dataframe, and if provided an expected taxon, check if
         it was found and how many results were found.
         """
+        # Statistics regarding the expected taxon, if provided
+        expectation = (
+            {
+                "taxon": self.expected_taxon,
+                "synonyms": self.synonyms if self.synonyms else None,
+                "counts": taxa_counts,
+            }
+            if self.expected_taxon
+            else {}
+        )
+
         ## Tally the number of hits per taxon
         found_taxon_counts = result["taxon"].value_counts()
 
         ## Top result - if expected taxon found, top result for taxon, otherwise overall top result
-        if self.expected_taxon and self.expected_taxon in found_taxon_counts:
+        if self.expected_taxon and any(
+            taxon in found_taxon_counts.index for taxon in self.all_taxon_names
+        ):
             top_result = (
-                result[result["taxon"] == self.expected_taxon].iloc[0].to_dict()
+                result[result["taxon"].isin(self.all_taxon_names)].iloc[0].to_dict()
             )
         else:
             top_result = result.iloc[0].to_dict()
@@ -204,7 +237,9 @@ class SearchPipeline:
             taxon_hits = result[result["taxon"] == taxon]
             top_taxon_hit = taxon_hits.iloc[0]
             taxon_summary[taxon] = {
-                "expected_taxon": True if self.expected_taxon == taxon else False,
+                "expected_taxon": "true"
+                if self.expected_taxon == taxon
+                else ("synonym" if taxon in self.synonyms else "false"),
                 "n_hits": len(taxon_hits),
                 "fident_range": [
                     float(taxon_hits["fident"].min()),
@@ -227,26 +262,22 @@ class SearchPipeline:
 
         ## Get the number of hits for the expected taxon
         expected_taxon_counts_in_result = None
+        synonym_taxon_counts_in_result = None
         if self.expected_taxon:
             expected_taxon_counts_in_result = int(
                 found_taxon_counts.get(self.expected_taxon, 0)
             )
-            logger.info(
-                f"Found {expected_taxon_counts_in_result} results for {self.expected_taxon}!"
+            synonym_taxon_counts_in_result = sum(
+                [found_taxon_counts.get(taxon, 0) for taxon in self.synonyms]
             )
-
-        expectation = (
-            {
-                "taxon": self.expected_taxon,
-                "counts": {"available_sequences": taxon_count},
-            }
-            if self.expected_taxon
-            else {}
-        )
+            logger.info(
+                f"Found {expected_taxon_counts_in_result} results for {self.expected_taxon} and {synonym_taxon_counts_in_result} for its synonyms."
+            )
 
         summary = {
             "n_contigs_with_hits": int(result["target"].nunique()),
             "n_expected_taxon_hits": expected_taxon_counts_in_result,
+            "n_synonym_hits": synonym_taxon_counts_in_result,
             "top_result": top_result,
             "taxon_summary": taxon_summary,
         }
@@ -270,16 +301,22 @@ class SearchPipeline:
             "results": results,
             "run_info": {
                 "version": importlib.metadata.version("markadoros"),
+                "tools": {
+                    "mmseqs": get_mmseqs_version(),
+                    "assembler": {self.assembler.name: self.assembler._get_version()}
+                    if self.assembler
+                    else None,
+                },
             },
         }
 
         return output
 
-    def _get_taxon_count(self, taxon_json: Path) -> int:
+    def _get_taxa_counts(self, taxa: list[str], taxon_json: Path) -> dict[str, int]:
         """Get count for a specific species from the count JSON."""
         with gzip.open(taxon_json, "rt", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get(self.expected_taxon, 0)
+            return {taxon: data.get(taxon, 0) for taxon in taxa if taxon in data}
 
     def _setup_database(self, db: Path, prefix: str) -> Path:
         """
@@ -434,11 +471,15 @@ class SearchPipeline:
             db_path = Path(params["db"])
 
         # Get taxon count expectation
-        taxon_count = None
+        taxa_counts = {}
         if self.expected_taxon:
-            taxon_count = self._get_taxon_count(params["taxon_db"])
+            taxa_counts = self._get_taxa_counts(
+                self.all_taxon_names, params["taxon_db"]
+            )
+            expected_taxon_count = taxa_counts.get(self.expected_taxon, 0)
+            synonym_count = sum(taxa_counts.values()) - expected_taxon_count
             logger.info(
-                f"There are {taxon_count} possible records for {self.expected_taxon}!"
+                f"There are {expected_taxon_count} possible records for {self.expected_taxon}, and {synonym_count} for synonyms."
             )
 
         marker = params["marker"]
@@ -489,7 +530,7 @@ class SearchPipeline:
         summary = self._summarise_result(
             input=input,
             result=result,
-            taxon_count=taxon_count,
+            taxa_counts=taxa_counts,
             marker=marker,
             database=str(params["db"]),
             n_reads=n_reads,
