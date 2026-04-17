@@ -10,6 +10,7 @@ from pymmseqs.parsers import SearchParser as MMSeqsSearchParser
 
 from markadoros.assembler_runners import AssemblerRunner
 from markadoros.input_types import InputType
+from markadoros.read_preprocessor import ReadPreprocessor
 
 
 class ReadAssembler:
@@ -22,12 +23,14 @@ class ReadAssembler:
         prefix: str,
         assembler: AssemblerRunner,
         input_type: InputType,
+        fallback_reads: int,
     ):
         self.tmpdir = Path(tmpdir)
         self.threads = threads
         self.prefix = prefix
         self.assembler = assembler
         self.input_type = input_type
+        self.fallback_reads = fallback_reads
 
     def _extract_reads(
         self, search_result: MMSeqsSearchParser, input_reads: Path, output_path: Path
@@ -232,7 +235,18 @@ class ReadAssembler:
         assembled_contigs = self._assemble_reads(aligned_reads, marker)
 
         if assembled_contigs is None:
-            logger.error(f"Failed to assemble contigs for {marker}")
-            return n_aligned_reads, None
+            logger.error(f"Failed to assemble contigs for {marker}.")
+
+            preprocessor = ReadPreprocessor(self.tmpdir, threads=self.threads)
+            if self.fallback_reads > 0:
+                logger.info(
+                    f"Running a fallback search on the first {self.fallback_reads} matched reads."
+                )
+                fallback_reads = preprocessor.preprocess_reads(
+                    aligned_reads, self.fallback_reads
+                )
+                return n_aligned_reads, fallback_reads
+            else:
+                return n_aligned_reads, None
 
         return n_aligned_reads, assembled_contigs

@@ -43,6 +43,7 @@ class SearchPipeline:
         min_seq_id: float,
         min_aln_len: int,
         save_contigs: bool,
+        fallback_reads: int,
     ):
         self.outdir = Path(outdir)
         self.tmpdir = Path(tmpdir)
@@ -56,6 +57,7 @@ class SearchPipeline:
         self.min_seq_id = min_seq_id
         self.min_aln_len = min_aln_len
         self.save_contigs = save_contigs
+        self.fallback_reads = fallback_reads
 
         # Initialize assembler based on platform
         assembler: AssemblerRunner | None
@@ -151,6 +153,7 @@ class SearchPipeline:
             prefix=prefix,
             assembler=self.assembler,
             input_type=self.input_type,
+            fallback_reads=self.fallback_reads,
         )
 
         return read_assembler, subsampled_reads
@@ -243,7 +246,9 @@ class SearchPipeline:
 
         # Setup preprocessing and assembly if working with reads
         read_assembler, subsampled_reads = self._setup_preprocessing(
-            input, n_reads, output_prefix
+            input,
+            n_reads,
+            output_prefix,
         )
 
         # Setup database (copy to tmpdir if requested)

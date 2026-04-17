@@ -34,15 +34,26 @@ class GOATSynonymGetter:
 
             if first_result.get("scientific_name") != taxon:
                 logger.warning(
-                    f"GOAT lookup returned a different taxon: {first_result.get('scientific_name')}. No synonyms will be used."
+                    f"GOAT lookup returned a different taxon: {first_result.get('scientific_name')}."
                 )
-                return []
+                synonyms = [
+                    x.get("name")
+                    for x in first_result.get("taxon_names")
+                    if x.get("class") in ["scientific name", "synonym"]
+                ]
 
-            synonyms = [
-                x.get("name")
-                for x in first_result.get("taxon_names")
-                if x.get("class") == "synonym"
-            ]
+                if taxon in synonyms:
+                    synonyms.remove(taxon)
+                    return synonyms
+                else:
+                    return []
+
+            else:
+                synonyms = [
+                    x.get("name")
+                    for x in first_result.get("taxon_names")
+                    if x.get("class") == "synonym"
+                ]
 
             logger.info(f"Found the following synonyms: {', '.join(synonyms)}")
 

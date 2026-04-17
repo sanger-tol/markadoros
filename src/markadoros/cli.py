@@ -41,7 +41,6 @@ def cli():
     ▐▌  ▐▌     █    █ ▀▄   ▗▞▀▜▌▀▄▄▄▀ █   ▀▄▄▄▀ ▄▄▄▀
     ▐▌  ▐▌          █  █   ▝▚▄▟▌
 
-
     """)
 
 
@@ -403,6 +402,12 @@ def bold_tsv_database(
     default=False,
     help="Save the assembled contigs to file in the output directory.",
 )
+@click.option(
+    "--fallback-reads",
+    type=int,
+    default=30,
+    help="If assembly fails, fall back and search the first N matched reads for a match.",
+)
 @click.argument(
     "input",
     type=click.Path(exists=True),
@@ -424,6 +429,7 @@ def search(
     cleanup: bool,
     save_contigs: bool,
     input: str,
+    fallback_reads: int,
 ):
     """Search reads or contigs against a marker database.
 
@@ -431,6 +437,10 @@ def search(
     """
     start_time = time.perf_counter()
     set_mmseqs_path()
+
+    # Validate fallback reads
+    if fallback_reads < 0:
+        raise click.ClickException("--fallback-reads must be greater than 0.")
 
     # Load and validate database
     try:
@@ -473,6 +483,7 @@ def search(
         min_seq_id=min_seq_id,
         min_aln_len=min_aln_len,
         save_contigs=save_contigs,
+        fallback_reads=fallback_reads,
     )
     pipeline.run(
         input=Path(input),
