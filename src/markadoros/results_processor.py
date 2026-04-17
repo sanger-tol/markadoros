@@ -307,9 +307,11 @@ class ResultsProcessor:
         if self.result.empty:
             return
 
-        if self.expected_taxon and self.expected_taxon in self.result["taxon"].values:
+        if self.expected_taxon and any(
+            taxon in self.all_taxon_names for taxon in self.result["taxon"].values
+        ):
             out = (
-                self.result[self.result["taxon"] == self.expected_taxon]
+                self.result[self.result["taxon"].isin(self.all_taxon_names)]
                 .head(1)
                 .reset_index()
             )
@@ -325,6 +327,7 @@ class ResultsProcessor:
             \tfident: {row["fident"]}
             \talnlen: {row["alnlen"]}
             \tcoverage: {row["coverage"]}x
+            \tis_expected_taxon: {row["is_expected_taxon"]}
             """
             )
 
