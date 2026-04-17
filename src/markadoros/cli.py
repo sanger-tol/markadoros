@@ -34,14 +34,17 @@ def cli():
         format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
         level="INFO",
     )
-    click.echo("""
+    click.echo(
+        """
 
     ▗▖  ▗▖▗▞▀▜▌ ▄▄▄ █  ▄ ▗▞▀▜▌▐▌ ▄▄▄   ▄▄▄ ▄▄▄   ▄▄▄
     ▐▛▚▞▜▌▝▚▄▟▌█    █▄▀  ▝▚▄▟▌▐▌█   █ █   █   █ ▀▄▄
     ▐▌  ▐▌     █    █ ▀▄   ▗▞▀▜▌▀▄▄▄▀ █   ▀▄▄▄▀ ▄▄▄▀
     ▐▌  ▐▌          █  █   ▝▚▄▟▌
 
-    """)
+    """,
+        err=True,
+    )
 
 
 @cli.command("database")
