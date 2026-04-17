@@ -34,6 +34,15 @@ def cli():
         format="[{time:HH:mm:ss}] | markadoros | {level} - {message}",
         level="INFO",
     )
+    click.echo("""
+
+    ▗▖  ▗▖▗▞▀▜▌ ▄▄▄ █  ▄ ▗▞▀▜▌▐▌ ▄▄▄   ▄▄▄ ▄▄▄   ▄▄▄
+    ▐▛▚▞▜▌▝▚▄▟▌█    █▄▀  ▝▚▄▟▌▐▌█   █ █   █   █ ▀▄▄
+    ▐▌  ▐▌     █    █ ▀▄   ▗▞▀▜▌▀▄▄▄▀ █   ▀▄▄▄▀ ▄▄▄▀
+    ▐▌  ▐▌          █  █   ▝▚▄▟▌
+
+
+    """)
 
 
 @cli.command("database")
@@ -429,12 +438,16 @@ def search(
     except (FileNotFoundError, json.JSONDecodeError) as e:
         raise click.ClickException(f"Could not load database from {index}: {e}")
 
-    # Handle synonyms
-    if find_goat_synonyms and not synonyms:
+    # Handle synonym finding
+    if synonyms:
+        if find_goat_synonyms:
+            logger.warning(
+                "Both --find-goat-synonyms and --synonyms provided; using --synonyms only."
+            )
+        input_synonyms = synonyms.split(",")
+    elif find_goat_synonyms:
         goat_lookup = GOATSynonymGetter()
         input_synonyms = goat_lookup.get_synonyms(expected_taxon)
-    elif synonyms:
-        input_synonyms = synonyms.split(",")
     else:
         input_synonyms = []
 

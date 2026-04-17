@@ -1,5 +1,12 @@
 # Markadoros - fast barcode assembly and identification from raw sequencing data
 
+```
+    ▗▖  ▗▖▗▞▀▜▌ ▄▄▄ █  ▄ ▗▞▀▜▌▐▌ ▄▄▄   ▄▄▄ ▄▄▄   ▄▄▄
+    ▐▛▚▞▜▌▝▚▄▟▌█    █▄▀  ▝▚▄▟▌▐▌█   █ █   █   █ ▀▄▄
+    ▐▌  ▐▌     █    █ ▀▄   ▗▞▀▜▌▀▄▄▄▀ █   ▀▄▄▄▀ ▄▄▄▀
+    ▐▌  ▐▌          █  █   ▝▚▄▟▌
+```
+
 ## Introduction
 
 Markadoros is a Python tool for the identification and assembly of barcode genes in raw sequencing data, using
@@ -113,6 +120,18 @@ If your FASTA release does not conform to the above presets, set `-x` to `generi
 
 If you build additional databases pointing to the same output directory, the existing index file will be updated to include the new entries.
 
+### Building a database from the BOLD TSV release
+
+Alternatively, you can use the `bold-coi-from-tsv` to build a BOLD COI database from the BOLD TSV release. The BOLD TSV release includes information on the BIN, or cluster, of each sequence and it can thus be used to create a database with a single representative sequence per cluster instead of running your own clustering. Currently this appoach is only supported for the COI marker.
+
+Run it as follows:
+
+```
+markadoros bold-coi-from-tsv --prefix BOLD --threads 16 --outdir . BOLD_Public.27-Mar-2026.tsv.gz
+```
+
+Options such as `--exclude-file` and `--min-length` work the same as in the standard `database` command.
+
 ### Searching for Barcodes
 
 Use the `search` command to identify barcode genes in a set of reads or pre-assembled contigs:
@@ -120,6 +139,16 @@ Use the `search` command to identify barcode genes in a set of reads or pre-asse
 ```bash
 markadoros search -x illumina --index db/db.json reads.fq.gz
 ```
+
+You can supply the binomial name of a taxon that you believe the data should arise from with `--expected-taxon`. In
+this case, markadoros will check the results and tell you how many possible sequences there are to match against and
+how many hits were found for the taxon. If the expected taxon is found, it also reports the top hit for that taxon as the
+best hit instead of the overall top hit.
+
+Sometimes, there may be synonyms for the expected taxon that you may wish to check additionally. To accomodate these, 
+you can supply either the `--find-goat-synonyms` flag, which will pull the names of all synonyms from 
+[GoaT](https://goat.genomehubs.org/), or alternatively supply known synonyms as a comma-separated list with `--synonyms`. If
+a hit is for a synonym, it will be marked as such in the output results.
 
 **Required options:**
 
@@ -140,6 +169,8 @@ markadoros search -x illumina --index db/db.json reads.fq.gz
 
 - `--db <name>` - Search a specific database only (default: search all databases in index)
 - `--expected_taxon <name>` - Expected taxon binomial name for validation
+- `-s`, `--find-goat-synonyms` - Get the synonyms for the provided expected taxon from GoaT
+- `--synonyms` - A comma separated list of synonyms. Will override `--find-goat-synonyms` if provided.
 - `-n, --nreads <N>` - Limit to first N reads
 - `-m, --min_seq_id <float>` - Minimum sequence identity for hits (default: 0.96)
 - `-l, --min_aln_len <int>` - Minimum alignment length for hits (default: 450)
@@ -167,11 +198,12 @@ The search subtool outputs a JSON file summarising the search. It has the follow
       "marker": <string>, // marker gene in database
       "database": <path>, // path to mmseqs database
       "contig_stats": <dict>, // number, total length and n50 of assembled contigs
-      "expected_taxon": <dict>, // name of asserted taxon and number of records present in database
+      "expected_taxon": <dict>, // name of asserted taxon and number of records present in database, including synonyms
   },
   "summary": {
       "n_contigs_with_hits": <int>, // number of assembled contigs with search hits
       "n_expected_taxon_hits": <int>, // number of hits for the asserted taxon
+      "n_synonym_hits": <int>, // number of hits for synonyms
       "top_result": <dict>, // top result (highest bitscore) for asserted taxon if found or overall if not
       "taxon_summary": <dict>, // per-taxon summary of results - number of hits, min and max %ID and alignment lengths, and sequence of top hit
   },

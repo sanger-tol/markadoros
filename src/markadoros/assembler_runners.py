@@ -11,6 +11,7 @@ class AssemblerRunner(ABC):
 
     def __init__(self, threads: int):
         self.threads = threads
+        self.name = "unknown"
         self._check_install()
 
     @abstractmethod
@@ -85,9 +86,9 @@ class AssemblerRunner(ABC):
 
 class SpadesRunner(AssemblerRunner):
     def __init__(self, threads: int, rna: bool = False):
+        super().__init__(threads)
         self.rna = rna
         self.name = "SPAdes"
-        super().__init__(threads)
 
     def _check_install(self) -> None:
         """Check if spades.py is available and extract version."""
@@ -139,9 +140,9 @@ class SpadesRunner(AssemblerRunner):
 
 class HifiasmRunner(AssemblerRunner):
     def __init__(self, threads: int, ont: bool = False):
+        super().__init__(threads)
         self.ont = ont
         self.name = "hifiasm"
-        super().__init__(threads)
 
     def _check_install(self) -> None:
         """Check if hifiasm is available and extract version."""
