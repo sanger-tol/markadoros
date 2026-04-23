@@ -46,6 +46,8 @@ class SearchPipeline:
         fallback_reads: int,
     ):
         self.outdir = Path(outdir)
+        if not self.outdir.exists():
+            self.outdir.mkdir(parents=True, exist_ok=True)
         self.tmpdir = Path(tmpdir)
         self.threads = threads
         self.database_index = database_index

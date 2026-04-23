@@ -1,0 +1,69 @@
+name: Run pytest
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            python3-dev \
+            libbz2-dev \
+            liblzma-dev \
+            libcurl4-gnutls-dev \
+            libssl-dev \
+            zlib1g-dev
+
+      - name: Conda setup
+        if: contains(inputs.profile, 'conda')
+        uses: conda-incubator/setup-miniconda@505e6394dae86d6a5c7fbb6e3fb8938e3e863830 # v3
+        with:
+          conda-solver: libmamba
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          conda-remove-defaults: true
+
+      - name: Install bioinformatics tools via conda
+        shell: bash -l {0}
+        run: |
+          conda install -y mmseqs2 hifiasm spades
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.7"
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      - name: Run tests
+        run: |
+          conda activate test
+          uv run pytest tests

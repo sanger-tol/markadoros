@@ -134,9 +134,11 @@ class ResultsProcessor:
 
         if self.expected_taxon:
             result["is_expected_taxon"] = result["taxon"].apply(
-                lambda taxon: "true"
-                if taxon == self.expected_taxon
-                else ("synonym" if taxon in self.synonyms else "false")
+                lambda taxon: (
+                    "true"
+                    if taxon == self.expected_taxon
+                    else ("synonym" if taxon in self.synonyms else "false")
+                )
             )
 
         # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
@@ -147,8 +149,11 @@ class ResultsProcessor:
             "marker",
             "taxon",
             "lineage",
-            "is_expected_taxon",
         ]
+
+        # Only include is_expected_taxon if it was created
+        if "is_expected_taxon" in result.columns:
+            desired_cols.append("is_expected_taxon")
 
         # Add remaining columns in their original order
         remaining_cols = [
@@ -319,6 +324,7 @@ class ResultsProcessor:
             out = self.result.head(1).reset_index()
 
         for _, row in out.iterrows():
+            is_expected_taxon = row.get("is_expected_taxon", "unknown")
             logger.info(
                 f"""\n
             \tcontig: {row["target"]}
@@ -327,7 +333,7 @@ class ResultsProcessor:
             \tfident: {row["fident"]}
             \talnlen: {row["alnlen"]}
             \tcoverage: {row["coverage"]}x
-            \tis_expected_taxon: {row["is_expected_taxon"]}
+            \tis_expected_taxon: {is_expected_taxon}
             """
             )
 

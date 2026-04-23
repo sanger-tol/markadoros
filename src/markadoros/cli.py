@@ -19,7 +19,7 @@ from markadoros.header_processor import (
 )
 from markadoros.input_types import get_valid_input_types, normalize_input_type
 from markadoros.search_pipeline import SearchPipeline
-from markadoros.utils import set_mmseqs_path, validate_and_load_index
+from markadoros.utils import get_simple_name, set_mmseqs_path, validate_and_load_index
 
 
 @click.group()
@@ -419,7 +419,7 @@ def search(
     type: str,
     index: str,
     outdir: str,
-    prefix: str,
+    prefix: str | None,
     nreads: int,
     expected_taxon: str,
     find_goat_synonyms: bool,
@@ -469,7 +469,7 @@ def search(
 
     # Initialise prefix
     if prefix is None:
-        prefix = Path(input).stem
+        prefix = get_simple_name(Path(input))
 
     tmpdir = Path(outdir) / f"{prefix}.tmp"
 

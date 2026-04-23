@@ -1,0 +1,11 @@
+{
+  "BOLD.COI": {
+    "marker": "COI",
+    "db": "/Users/jd42/Projects/markadoros/tests/db/BOLD.COI/db",
+    "taxon_db": "/Users/jd42/Projects/markadoros/tests/db/BOLD.COI/taxon.json.gz",
+    "n_seqs": 3,
+    "built_from": "/Users/jd42/Projects/markadoros/tests/data/BOLD.sub.fa.gz",
+    "deduplicated": false,
+    "clustered": false
+  }
+}
