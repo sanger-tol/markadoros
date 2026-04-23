@@ -6,6 +6,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   uv-example:
@@ -14,7 +15,6 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
@@ -23,7 +23,8 @@ jobs:
       run:
         shell: bash -el {0}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository code
+        uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: |
@@ -38,11 +39,10 @@ jobs:
             zlib1g-dev
 
       - name: Conda setup
-        if: contains(inputs.profile, 'conda')
         uses: conda-incubator/setup-miniconda@505e6394dae86d6a5c7fbb6e3fb8938e3e863830 # v3
         with:
           conda-solver: libmamba
-          channels: conda-forge,bioconda
+          channels: conda-forge,bioconda,nodefaults
           channel-priority: strict
           conda-remove-defaults: true
 
