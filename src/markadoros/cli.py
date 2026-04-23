@@ -495,8 +495,6 @@ def search(
         prefix=prefix,
     )
 
-    print("trigger tests")
-
     elapsed = time.perf_counter() - start_time
     formatted_time = str(timedelta(seconds=int(elapsed)))
 
