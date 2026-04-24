@@ -24,34 +24,31 @@ You will need the following external tools installed to run Markadoros:
 - [SPAdes](https://github.com/ablab/spades)
 - [Hifiasm](https://github.com/chhylp123/hifiasm)
 
-### Python Dependencies
-
-Markadoros requires Python 3.11+ and the following packages:
-
-- biopython (≥1.86)
-- click (≥8.3.1)
-- jsonschema (≥4.26.0)
-- pandas (≥2.3.3)
-- pymmseqs (≥1.0.5)
-- pysam (≥0.23.3)
-- scikit-learn (≥1.8.0)
-
-These are automatically installed when you install Markadoros.
-
 ## Installation
+
+### From Conda
+
+markadoros is on Bioconda. Install it as follows:
+
+```bash
+conda install -c bioconda markadoros
+```
+
+### With uv
+
+Install markadoros with uv. You will need to install the external dependencies independently.
+
+```bash
+uv tool install markadoros
+```
 
 ### From source
 
+To install markadoros from source, clone the repository and run the following inside the source
+directory:
+
 ```bash
 pip install -e .
-```
-
-### Dependencies
-
-Install the required external tools with Conda:
-
-```bash
-conda install -c bioconda mmseqs2 spades hifiasm
 ```
 
 ## Quick Start
