@@ -207,16 +207,17 @@ class ResultsProcessor:
         found_taxon_counts = self.result["taxon"].value_counts()
 
         # Top result - if expected taxon found, top result for taxon, otherwise overall top result
+        top_result = self.result.iloc[0].to_dict()
+
+        expected_taxon_top_result = {}
         if self.expected_taxon and any(
             taxon in found_taxon_counts.index for taxon in self.all_taxon_names
         ):
-            top_result = (
+            expected_taxon_top_result = (
                 self.result[self.result["taxon"].isin(self.all_taxon_names)]
                 .iloc[0]
                 .to_dict()
             )
-        else:
-            top_result = self.result.iloc[0].to_dict()
 
         # Summary for each taxon
         taxon_summary = {}
@@ -266,6 +267,7 @@ class ResultsProcessor:
             "n_expected_taxon_hits": expected_taxon_counts_in_result,
             "n_synonym_hits": synonym_taxon_counts_in_result,
             "top_result": top_result,
+            "expected_taxon_top_result": expected_taxon_top_result,
             "taxon_summary": taxon_summary,
         }
 
@@ -312,16 +314,7 @@ class ResultsProcessor:
         if self.result.empty:
             return
 
-        if self.expected_taxon and any(
-            taxon in self.all_taxon_names for taxon in self.result["taxon"].values
-        ):
-            out = (
-                self.result[self.result["taxon"].isin(self.all_taxon_names)]
-                .head(1)
-                .reset_index()
-            )
-        else:
-            out = self.result.head(1).reset_index()
+        out = self.result.head(1).reset_index()
 
         for _, row in out.iterrows():
             is_expected_taxon = row.get("is_expected_taxon", "unknown")
