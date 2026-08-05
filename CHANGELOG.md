@@ -3,7 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [[1.1.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.0.0)] - [2026-04-23]
+## [[1.2.0dev](https://github.com/sanger-tol/markadoros/releases/tag/v1.2.0)] - [TBD]
+
+### Changed
+
+- The results are no longer sorted by coverage, so the top result is the top result across all contigs rather than the contig with the highest coverage.
+
+## [[1.1.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.1.0)] - [2026-04-23]
 
 ### Changed
 
