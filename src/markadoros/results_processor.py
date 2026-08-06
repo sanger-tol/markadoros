@@ -125,12 +125,9 @@ class ResultsProcessor:
         else:
             result["coverage"] = pd.NA
 
-        if extract_coverage:
-            result = result.sort_values(
-                by=["coverage", "target", "bits"], ascending=[False, True, False]
-            )
-        else:
-            result = result.sort_values(by=["target", "bits"], ascending=[True, False])
+        result = result.sort_values(
+            by=["bits"], ascending=[False]
+        )
 
         if self.expected_taxon:
             result["is_expected_taxon"] = result["taxon"].apply(
