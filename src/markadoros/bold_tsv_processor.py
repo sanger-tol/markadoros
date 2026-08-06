@@ -117,13 +117,12 @@ class BoldTSVProcessor:
                 ])
                 .list.drop_nulls()
                 .list.first()
-                .list.unique()
                 .alias("taxonomy")
             )
             .collect(engine="streaming")
         ).to_dicts()
 
-        bins_taxa = {row["bin_uri"]: row["taxonomy"] for row in bins}
+        bins_taxa = {row["bin_uri"]: list(set(row["taxonomy"])) for row in bins}
 
         ## Make the type-checker happy
         assert isinstance(df, pl.DataFrame)
