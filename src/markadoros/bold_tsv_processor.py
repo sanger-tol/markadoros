@@ -117,6 +117,7 @@ class BoldTSVProcessor:
                 ])
                 .list.drop_nulls()
                 .list.first()
+                .list.unique()
                 .alias("taxonomy")
             )
             .collect(engine="streaming")
