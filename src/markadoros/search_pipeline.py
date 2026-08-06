@@ -330,6 +330,7 @@ class SearchPipeline:
             assembler=self.assembler,
             taxa_counts=taxa_counts,
             extract_coverage=(self.input_type != InputType.CONTIGS),
+            bins_taxa_path=db_params["bins_taxa"],
         )
 
         # Save summary

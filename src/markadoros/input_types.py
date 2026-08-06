@@ -25,6 +25,7 @@ INPUT_TYPE_ALIASES: dict[str, InputType] = {
     "pb": InputType.PACBIO,
     "pacbio": InputType.PACBIO,
     "pacbio_hifi": InputType.PACBIO,
+    "hifi": InputType.PACBIO,
     # Oxford Nanopore aliases
     "ont": InputType.ONT,
     "oxford_nanopore": InputType.ONT,

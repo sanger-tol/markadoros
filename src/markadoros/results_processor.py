@@ -2,6 +2,7 @@ import importlib.metadata
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
+import gzip
 
 import pandas as pd
 import pysam
@@ -37,6 +38,7 @@ class ResultsProcessor:
         assembler: "AssemblerRunner | None" = None,
         taxa_counts: dict[str, int] | None = None,
         extract_coverage: bool = False,
+        bins_taxa_path: Path | None = None
     ):
         """Initialize processor with results and parameters.
 
@@ -57,6 +59,7 @@ class ResultsProcessor:
             assembler: Assembler instance
             taxa_counts: Expected taxon counts from database
             extract_coverage: Whether to extract coverage from contigs
+            bins_taxa_path: Path to a gzipped JSON file containing the list of taxon names attached to each BOLD BIN
         """
         self.expected_taxon = expected_taxon
         self.synonyms = synonyms or []
@@ -64,6 +67,8 @@ class ResultsProcessor:
             [expected_taxon] + self.synonyms if expected_taxon else []
         )
         self.input_type = input_type or InputType.CONTIGS
+
+        self.bins_taxa = self._load_bins_taxa(bins_taxa_path)
 
         # Process results
         self.result = self._process_results(result, contigs, extract_coverage)
@@ -79,6 +84,19 @@ class ResultsProcessor:
             contig_stats=contig_stats,
             assembler=assembler,
         )
+
+    def _load_bins_taxa(self, path) -> dict[str, list[str]]:
+        if not path:
+            return {}
+        with gzip.open(path, "rt") as fh:
+            return json.load(fh)
+
+    def _get_bin_taxa(self, seq_id: str) -> list[str]:
+        parts = seq_id.split("/")
+        if len(parts) >= 2:
+            bin_id = parts[1]
+            return self.bins_taxa.get(bin_id, [])
+        return []
 
     def _process_results(
         self,
@@ -113,6 +131,9 @@ class ResultsProcessor:
         result["lineage"] = result["query"].str.split("|").str[3]
         result["sequence"] = result.apply(
             lambda row: extract_subsequence(row, sequences), axis=1
+        )
+        result["bin_taxa"] = result["seq_id"].apply(
+            lambda seq_id: self._get_bin_taxa(seq_id)
         )
 
         if extract_coverage:

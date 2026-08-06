@@ -1,6 +1,8 @@
+import gzip
+import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from loguru import logger
 
@@ -66,6 +68,7 @@ class DatabaseCreator:
         fasta: Path,
         markers: list[str],
         prefix: str,
+        bins_taxa: dict[str, str] | None = None,
     ) -> None:
         """Create MMSeqs2 databases from a FASTA file."""
         # Process FASTA file
@@ -78,6 +81,12 @@ class DatabaseCreator:
         for database, params in processed_dict.items():
             params = self._db_builder.build(database, params)
 
+            bins_taxa_path = None
+            if bins_taxa is not None:
+                bins_taxa_path = self._outdir / f"{prefix}.{params['marker']}" / "bins_taxa.json.gz"
+                with gzip.open(bins_taxa_path, mode="wt") as f:
+                    json.dump(bins_taxa, f, indent=2)
+
             # Add the database path and build FASTA to the db dict, and
             # remove the temporary FASTA file from it
             db_entry = {
@@ -85,6 +94,7 @@ class DatabaseCreator:
                 "built_from": str(fasta.resolve()),
                 "deduplicated": self.deduplicate,
                 "clustered": self.cluster,
+                "bins_taxa": bins_taxa_path,
             }
 
             # Add the database entry to the index
