@@ -184,8 +184,8 @@ class ResultsProcessor:
                 axis=1
             )
         else:
-            result["is_expected_taxon"] = pd.NA
-            result["expected_taxon_match_type"] = pd.NA
+            result["is_expected_taxon"] = None
+            result["expected_taxon_match_type"] = None
 
         result = result.drop(columns=["bin_taxa"])
 
