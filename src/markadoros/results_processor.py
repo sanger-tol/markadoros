@@ -98,6 +98,18 @@ class ResultsProcessor:
             return self.bins_taxa.get(bin_id, [])
         return []
 
+    def _is_expected_taxon(self, taxon, bin_taxa):
+        """Classify a taxon against expected taxon and synonyms."""
+        if taxon == self.expected_taxon:
+            return "true"
+        if taxon in self.synonyms:
+            return "synonym"
+        if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
+            return "bold_bin_contains_expected_taxon"
+        if bin_taxa and any(t in self.synonyms for t in bin_taxa):
+            return "bold_bin_contains_synonym"
+        return "false"
+
     def _process_results(
         self,
         result: pd.DataFrame,
@@ -151,13 +163,11 @@ class ResultsProcessor:
         )
 
         if self.expected_taxon:
-            result["is_expected_taxon"] = result["taxon"].apply(
-                lambda taxon: (
-                    "true"
-                    if taxon == self.expected_taxon
-                    else ("synonym" if taxon in self.synonyms else "false")
-                )
+            result["is_expected_taxon"] = result.apply(
+                lambda row: self._is_expected_taxon(row["taxon"], row["bin_taxa"]),
+                axis=1
             )
+        result = result.drop(columns=["bin_taxa"])
 
         # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
         desired_cols = [
