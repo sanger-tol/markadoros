@@ -270,9 +270,8 @@ class ResultsProcessor:
             taxon_hits = self.result[self.result["taxon"] == taxon]
             top_taxon_hit = taxon_hits.iloc[0]
             taxon_summary[taxon] = {
-                "expected_taxon": "true"
-                if self.expected_taxon == taxon
-                else ("synonym" if taxon in self.synonyms else "false"),
+                "is_expected_taxon": self._is_expected_taxon(taxon, None),
+                "expected_taxon_match_type": self._get_expected_taxon_match_type(taxon, None),
                 "n_hits": len(taxon_hits),
                 "fident_range": [
                     float(taxon_hits["fident"].min()),
