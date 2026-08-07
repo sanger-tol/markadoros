@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The results are no longer sorted by coverage, so the top result is the top result across all contigs rather than the contig with the highest coverage.
 - When building a COI database from a BOLD TSV file, the taxonomic makeup of each BIN is now stored as part of the database. This is then attached to each result so that other taxon names within the bin can be identified in cases of multi-taxon BINs.
 
+## Fixed
+
+- When using `--save-contigs`, if the pipeline has fallen back to searching reads these will now be correctly saved with a `.gz` extension.
+
 ## [[1.1.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.1.0)] - [2026-04-23]
 
 ### Changed

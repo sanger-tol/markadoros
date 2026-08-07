@@ -292,7 +292,10 @@ class SearchPipeline:
             logger.info(
                 f"Saving contigs to {self.outdir}/{output_prefix}.contigs.fasta"
             )
-            shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta")
+            if contigs.suffix == ".gz":
+                shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta.gz")
+            else:
+                shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta")
 
         # Get assembly statistics
         contig_stats = self._get_contig_stats(contigs)
