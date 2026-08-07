@@ -183,6 +183,10 @@ class ResultsProcessor:
                 lambda row: self._get_expected_taxon_match_type(row["taxon"], row["bin_taxa"]),
                 axis=1
             )
+        else:
+            result["is_expected_taxon"] = pd.NA
+            result["expected_taxon_match_type"] = pd.NA
+
         result = result.drop(columns=["bin_taxa"])
 
         # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
