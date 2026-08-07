@@ -198,6 +198,7 @@ class ResultsProcessor:
         # Only include is_expected_taxon if it was created
         if "is_expected_taxon" in result.columns:
             desired_cols.append("is_expected_taxon")
+            desired_cols.append("expected_taxon_match_type")
 
         # Add remaining columns in their original order
         remaining_cols = [
