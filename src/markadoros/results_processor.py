@@ -98,16 +98,28 @@ class ResultsProcessor:
             return self.bins_taxa.get(bin_id, [])
         return []
 
+    def _get_expected_taxon_match_type(self, taxon, bin_taxa):
+        """Classify a taxon against expected taxon and synonyms."""
+        if taxon == self.expected_taxon:
+            return "direct_match"
+        if taxon in self.synonyms:
+            return "synonym_match"
+        if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
+            return "bold_bin_contains_expected_taxon"
+        if bin_taxa and any(t in self.synonyms for t in bin_taxa):
+            return "bold_bin_contains_synonym"
+        return "none"
+
     def _is_expected_taxon(self, taxon, bin_taxa):
         """Classify a taxon against expected taxon and synonyms."""
         if taxon == self.expected_taxon:
             return "true"
         if taxon in self.synonyms:
-            return "synonym"
+            return "true"
         if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
-            return "bold_bin_contains_expected_taxon"
+            return "true"
         if bin_taxa and any(t in self.synonyms for t in bin_taxa):
-            return "bold_bin_contains_synonym"
+            return "true"
         return "false"
 
     def _process_results(
@@ -165,6 +177,10 @@ class ResultsProcessor:
         if self.expected_taxon:
             result["is_expected_taxon"] = result.apply(
                 lambda row: self._is_expected_taxon(row["taxon"], row["bin_taxa"]),
+                axis=1
+            )
+            result["expected_taxon_match_type"] = result.apply(
+                lambda row: self._get_expected_taxon_match_type(row["taxon"], row["bin_taxa"]),
                 axis=1
             )
         result = result.drop(columns=["bin_taxa"])
