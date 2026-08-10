@@ -281,7 +281,7 @@ def bold_tsv_database(
     tsv_processor = BoldTSVProcessor(
         tmpdir=Path(outdir) / "tmp",
     )
-    bins_fasta = tsv_processor.process_to_fasta(Path(tsv))
+    bins_fasta, bins_taxa = tsv_processor.process_to_fasta(Path(tsv))
 
     database_creator = DatabaseCreator(
         outdir=Path(outdir),
@@ -297,6 +297,7 @@ def bold_tsv_database(
         fasta=bins_fasta,
         markers=["COI"],
         prefix=prefix,
+        bins_taxa=bins_taxa,
     )
 
     elapsed = time.perf_counter() - start_time

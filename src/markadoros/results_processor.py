@@ -2,6 +2,7 @@ import importlib.metadata
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
+import gzip
 
 import pandas as pd
 import pysam
@@ -37,6 +38,7 @@ class ResultsProcessor:
         assembler: "AssemblerRunner | None" = None,
         taxa_counts: dict[str, int] | None = None,
         extract_coverage: bool = False,
+        bins_taxa_path: Path | None = None
     ):
         """Initialize processor with results and parameters.
 
@@ -57,6 +59,7 @@ class ResultsProcessor:
             assembler: Assembler instance
             taxa_counts: Expected taxon counts from database
             extract_coverage: Whether to extract coverage from contigs
+            bins_taxa_path: Path to a gzipped JSON file containing the list of taxon names attached to each BOLD BIN
         """
         self.expected_taxon = expected_taxon
         self.synonyms = synonyms or []
@@ -64,6 +67,8 @@ class ResultsProcessor:
             [expected_taxon] + self.synonyms if expected_taxon else []
         )
         self.input_type = input_type or InputType.CONTIGS
+
+        self.bins_taxa = self._load_bins_taxa(bins_taxa_path)
 
         # Process results
         self.result = self._process_results(result, contigs, extract_coverage)
@@ -79,6 +84,43 @@ class ResultsProcessor:
             contig_stats=contig_stats,
             assembler=assembler,
         )
+
+    def _load_bins_taxa(self, path) -> dict[str, list[str]]:
+        if not path:
+            return {}
+        with gzip.open(path, "rt") as fh:
+            return json.load(fh)
+
+    def _get_bin_taxa(self, seq_id: str) -> list[str]:
+        parts = seq_id.split("/")
+        if len(parts) >= 2:
+            bin_id = parts[1]
+            return self.bins_taxa.get(bin_id, [])
+        return []
+
+    def _get_expected_taxon_match_type(self, taxon, bin_taxa):
+        """Classify a taxon against expected taxon and synonyms."""
+        if taxon == self.expected_taxon:
+            return "direct_match"
+        if taxon in self.synonyms:
+            return "synonym_match"
+        if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
+            return "bold_bin_contains_expected_taxon"
+        if bin_taxa and any(t in self.synonyms for t in bin_taxa):
+            return "bold_bin_contains_synonym"
+        return "none"
+
+    def _is_expected_taxon(self, taxon, bin_taxa):
+        """Classify a taxon against expected taxon and synonyms."""
+        if taxon == self.expected_taxon:
+            return "true"
+        if taxon in self.synonyms:
+            return "true"
+        if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
+            return "true"
+        if bin_taxa and any(t in self.synonyms for t in bin_taxa):
+            return "true"
+        return "false"
 
     def _process_results(
         self,
@@ -114,6 +156,9 @@ class ResultsProcessor:
         result["sequence"] = result.apply(
             lambda row: extract_subsequence(row, sequences), axis=1
         )
+        result["bin_taxa"] = result["seq_id"].apply(
+            lambda seq_id: self._get_bin_taxa(seq_id)
+        )
 
         if extract_coverage:
             result["coverage"] = (
@@ -130,13 +175,19 @@ class ResultsProcessor:
         )
 
         if self.expected_taxon:
-            result["is_expected_taxon"] = result["taxon"].apply(
-                lambda taxon: (
-                    "true"
-                    if taxon == self.expected_taxon
-                    else ("synonym" if taxon in self.synonyms else "false")
-                )
+            result["is_expected_taxon"] = result.apply(
+                lambda row: self._is_expected_taxon(row["taxon"], row["bin_taxa"]),
+                axis=1
             )
+            result["expected_taxon_match_type"] = result.apply(
+                lambda row: self._get_expected_taxon_match_type(row["taxon"], row["bin_taxa"]),
+                axis=1
+            )
+        else:
+            result["is_expected_taxon"] = [None] * len(result)
+            result["expected_taxon_match_type"] = [None] * len(result)
+
+        result = result.drop(columns=["bin_taxa"])
 
         # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
         desired_cols = [
@@ -151,6 +202,7 @@ class ResultsProcessor:
         # Only include is_expected_taxon if it was created
         if "is_expected_taxon" in result.columns:
             desired_cols.append("is_expected_taxon")
+            desired_cols.append("expected_taxon_match_type")
 
         # Add remaining columns in their original order
         remaining_cols = [
@@ -222,9 +274,8 @@ class ResultsProcessor:
             taxon_hits = self.result[self.result["taxon"] == taxon]
             top_taxon_hit = taxon_hits.iloc[0]
             taxon_summary[taxon] = {
-                "expected_taxon": "true"
-                if self.expected_taxon == taxon
-                else ("synonym" if taxon in self.synonyms else "false"),
+                "is_expected_taxon": top_taxon_hit["is_expected_taxon"],
+                "expected_taxon_match_type": top_taxon_hit["expected_taxon_match_type"],
                 "n_hits": len(taxon_hits),
                 "fident_range": [
                     float(taxon_hits["fident"].min()),
@@ -314,7 +365,6 @@ class ResultsProcessor:
         out = self.result.head(1).reset_index()
 
         for _, row in out.iterrows():
-            is_expected_taxon = row.get("is_expected_taxon", "unknown")
             logger.info(
                 f"""\n
             \tcontig: {row["target"]}
@@ -323,7 +373,8 @@ class ResultsProcessor:
             \tfident: {row["fident"]}
             \talnlen: {row["alnlen"]}
             \tcoverage: {row["coverage"]}x
-            \tis_expected_taxon: {is_expected_taxon}
+            \tis_expected_taxon: {row["is_expected_taxon"]}
+            \texpected_taxon_match_type: {row["expected_taxon_match_type"]}
             """
             )
 

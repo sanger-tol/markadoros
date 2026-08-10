@@ -1,8 +1,8 @@
 import hashlib
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pysam
 from Bio.Seq import Seq
@@ -81,7 +81,7 @@ class DatabaseFASTAProcessor:
         if record.comment is None:
             header = record.name
         else:
-            header = " ".join([record.name, record.comment])
+            header = f"{record.name} {record.comment}"
 
         return header
 
@@ -102,13 +102,13 @@ class DatabaseFASTAProcessor:
 
         output_handles = {
             db: igzip.open(self._tmpdir / f"{db}.fa.gz", "wb")
-            for db in databases.keys()
+            for db in databases
         }
         seen_sequences: dict[str, set[str]] | None = (
-            {db: set() for db in databases.keys()} if self._deduplicate else None
+            {db: set() for db in databases} if self._deduplicate else None
         )
-        record_counts = {db: 0 for db in databases.keys()}
-        chunks: dict[str, list[bytes]] = {db: [] for db in databases.keys()}
+        record_counts = {db: 0 for db in databases}
+        chunks: dict[str, list[bytes]] = {db: [] for db in databases}
 
         def flush_chunk(db_name: str) -> None:
             if chunks[db_name]:
@@ -131,7 +131,7 @@ class DatabaseFASTAProcessor:
                         continue
 
                     header = self._get_header(record)
-                    marker, taxon, output_header = self.header_processor(header)
+                    marker, _taxon, output_header = self.header_processor(header)
 
                     if any(pattern.search(header) for pattern in self._exclusions):
                         continue
@@ -165,11 +165,11 @@ class DatabaseFASTAProcessor:
                         if len(chunks[db_name]) >= 100_000:
                             flush_chunk(db_name)
 
-        except IOError as e:
-            raise IOError(f"Error processing {fasta.name}: {e}") from e
+        except OSError as e:
+            raise OSError(f"Error processing {fasta.name}: {e}") from e
 
         finally:
-            for db_name in databases.keys():
+            for db_name in databases:
                 flush_chunk(db_name)
             for handle in output_handles.values():
                 handle.close()
@@ -183,6 +183,6 @@ class DatabaseFASTAProcessor:
                 **databases[db],
                 "processed_fasta": (self._tmpdir / f"{db}.fa.gz").resolve(),
             }
-            for db in databases.keys()
+            for db in databases
             if record_counts[db] > 0
         }

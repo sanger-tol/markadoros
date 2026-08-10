@@ -147,7 +147,7 @@ def set_mmseqs_path() -> None:
     )
 
 
-def extract_subsequence(row: pd.Series, contigs: dict[str, str]) -> str | None:
+def extract_subsequence(row: pd.Series, contigs: dict[str | None, str]) -> str | None:
     """
     Extracts a subsequence from a contig based on the tstart and tend coordinates in the row.
 
