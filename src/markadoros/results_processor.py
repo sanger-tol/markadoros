@@ -184,8 +184,8 @@ class ResultsProcessor:
                 axis=1
             )
         else:
-            result["is_expected_taxon"] = None
-            result["expected_taxon_match_type"] = None
+            result["is_expected_taxon"] = [None] * len(result)
+            result["expected_taxon_match_type"] = [None] * len(result)
 
         result = result.drop(columns=["bin_taxa"])
 
