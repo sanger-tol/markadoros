@@ -3,12 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [[1.2.0dev](https://github.com/sanger-tol/markadoros/releases/tag/v1.2.0)] - [TBD]
+## [[1.2.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.2.0)] - [2026-08-10]
 
 ### Changed
 
 - The results are no longer sorted by coverage, so the top result is the top result across all contigs rather than the contig with the highest coverage.
 - When building a COI database from a BOLD TSV file, the taxonomic makeup of each BIN is now stored as part of the database. This is then attached to each result so that other taxon names within the bin can be identified in cases of multi-taxon BINs.
+- The `is_expected_taxon` field in the summary JSON is now a simple boolean value. An additional field, `expected_taxon_match_type`, now provides the match type for the expected taxon (one of `exact`, `synonym`, `bold_bin_contains_expected_taxon`, `bold_bin_contains_synonym`).
 
 ## Fixed
 

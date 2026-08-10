@@ -365,7 +365,6 @@ class ResultsProcessor:
         out = self.result.head(1).reset_index()
 
         for _, row in out.iterrows():
-            is_expected_taxon = row.get("is_expected_taxon", "unknown")
             logger.info(
                 f"""\n
             \tcontig: {row["target"]}
@@ -374,7 +373,8 @@ class ResultsProcessor:
             \tfident: {row["fident"]}
             \talnlen: {row["alnlen"]}
             \tcoverage: {row["coverage"]}x
-            \tis_expected_taxon: {is_expected_taxon}
+            \tis_expected_taxon: {row["is_expected_taxon"]}
+            \texpected_taxon_match_type: {row["expected_taxon_match_type"]}
             """
             )
 
