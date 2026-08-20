@@ -1,6 +1,6 @@
 [project]
 name = "markadoros"
-version = "1.2.0"
+version = "1.2.1"
 description = "Markadoros is a tool for the identification and assembly of barcode genes in raw sequencing data."
 readme = "README.md"
 authors = [
@@ -19,10 +19,9 @@ dependencies = [
     "loguru>=0.7.3",
     "pandas>=2.3.3",
     "polars>=1.39.3",
-    "pymmseqs>=1.0.6",
+    "pymmseqs>=1.1.0",
     "pysam>=0.23.3",
     "requests>=2.33.1",
-    "scikit-learn>=1.8.0",
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
