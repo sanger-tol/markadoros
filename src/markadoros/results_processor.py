@@ -1,8 +1,8 @@
+import gzip
 import importlib.metadata
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
-import gzip
 
 import pandas as pd
 import pysam
@@ -25,7 +25,7 @@ class ResultsProcessor:
     def __init__(
         self,
         result: pd.DataFrame,
-        contigs: Path,
+        contigs: Path | None,
         input: Path,
         marker: str | None,
         database: str,
@@ -38,7 +38,7 @@ class ResultsProcessor:
         assembler: "AssemblerRunner | None" = None,
         taxa_counts: dict[str, int] | None = None,
         extract_coverage: bool = False,
-        bins_taxa_path: Path | None = None
+        bins_taxa_path: Path | None = None,
     ):
         """Initialize processor with results and parameters.
 
@@ -46,7 +46,7 @@ class ResultsProcessor:
 
         Args:
             result: DataFrame with raw search results
-            contigs: Path to contigs file
+            contigs: Path to contigs file, or None if no contigs were available
             input: Path to input file
             marker: Marker name
             database: Database path/name
@@ -125,7 +125,7 @@ class ResultsProcessor:
     def _process_results(
         self,
         result: pd.DataFrame,
-        contigs: Path,
+        contigs: Path | None,
         extract_coverage: bool = False,
     ) -> pd.DataFrame:
         """Process and enhance search results.
@@ -170,18 +170,18 @@ class ResultsProcessor:
         else:
             result["coverage"] = pd.NA
 
-        result = result.sort_values(
-            by=["bits"], ascending=[False]
-        )
+        result = result.sort_values(by=["bits"], ascending=[False])
 
         if self.expected_taxon:
             result["is_expected_taxon"] = result.apply(
                 lambda row: self._is_expected_taxon(row["taxon"], row["bin_taxa"]),
-                axis=1
+                axis=1,
             )
             result["expected_taxon_match_type"] = result.apply(
-                lambda row: self._get_expected_taxon_match_type(row["taxon"], row["bin_taxa"]),
-                axis=1
+                lambda row: self._get_expected_taxon_match_type(
+                    row["taxon"], row["bin_taxa"]
+                ),
+                axis=1,
             )
         else:
             result["is_expected_taxon"] = [None] * len(result)
@@ -238,9 +238,6 @@ class ResultsProcessor:
         Returns:
             Dictionary with complete summary
         """
-        if self.result.empty:
-            return {}
-
         # Statistics regarding the expected taxon, if provided
         expectation = (
             {
@@ -252,6 +249,42 @@ class ResultsProcessor:
             else {}
         )
 
+        if self.result.empty:
+            summary, results = {}, {}
+        else:
+            summary, results = self._summarise_results()
+
+        output = {
+            "input": {
+                "file": str(input.resolve()),
+                "n_reads": n_reads if self.input_type != InputType.CONTIGS else None,
+                "n_aligned_reads": n_aligned_reads,
+                "marker": marker,
+                "database": database,
+                "contig_stats": contig_stats,
+                "expected_taxon": expectation,
+            },
+            "summary": summary,
+            "results": results,
+            "run_info": {
+                "version": importlib.metadata.version("markadoros"),
+                "tools": {
+                    "mmseqs": get_mmseqs_version(),
+                    "assembler": {assembler.name: assembler._get_version()}
+                    if assembler is not None
+                    else None,
+                },
+            },
+        }
+
+        return output
+
+    def _summarise_results(self) -> tuple[dict, dict]:
+        """Summarise processed results per taxon and per target contig.
+
+        Returns:
+            Tuple of (summary, results) for a non-empty result set
+        """
         # Tally the number of hits per taxon
         found_taxon_counts = self.result["taxon"].value_counts()
 
@@ -324,30 +357,7 @@ class ResultsProcessor:
             for target, group in self.result.groupby("target")
         }
 
-        output = {
-            "input": {
-                "file": str(input.resolve()),
-                "n_reads": n_reads if self.input_type != InputType.CONTIGS else None,
-                "n_aligned_reads": n_aligned_reads,
-                "marker": marker,
-                "database": database,
-                "contig_stats": contig_stats,
-                "expected_taxon": expectation,
-            },
-            "summary": summary,
-            "results": results,
-            "run_info": {
-                "version": importlib.metadata.version("markadoros"),
-                "tools": {
-                    "mmseqs": get_mmseqs_version(),
-                    "assembler": {assembler.name: assembler._get_version()}
-                    if assembler is not None
-                    else None,
-                },
-            },
-        }
-
-        return output
+        return summary, results
 
     def get_summary(self) -> dict:
         """Get the generated summary.

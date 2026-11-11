@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.3.0) - [2026-11-11]
+
+- If no hits are found, markadoros will now write a JSON file with empty results and summary fields
+
 ## [[1.2.1](https://github.com/sanger-tol/markadoros/releases/tag/v1.2.1)] - [2026-08-20]
 
 ### Fixed
@@ -25,13 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Markadoros now reports the top hit and the top hit for the expected taxon separately in the summary JSON. 
+- Markadoros now reports the top hit and the top hit for the expected taxon separately in the summary JSON.
 
 ## [[1.0.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.0.0)] - [2026-04-23]
 
 ### Added
 
-- Added options `--find-goat-synonyms` to `markadoros search` to get a list of synonyms from the expected taxon from [GoaT](https://goat.genomehubs.org), 
+- Added options `--find-goat-synonyms` to `markadoros search` to get a list of synonyms from the expected taxon from [GoaT](https://goat.genomehubs.org),
   `--synonyms` to provide a comma-separated list of synonyms.
 - `markadoros search` will now fall back and search the first `--fallback-reads` reads assembly fails but reads containing markers were found.
 

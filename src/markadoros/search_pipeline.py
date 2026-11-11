@@ -285,37 +285,40 @@ class SearchPipeline:
 
         if contigs is None:
             logger.warning(f"No contigs available for {db_name}!")
-            return
+            contig_stats = {}
+            result = pd.DataFrame()
+        else:
+            # Save contigs if requested
+            if self.save_contigs:
+                logger.info(
+                    f"Saving contigs to {self.outdir}/{output_prefix}.contigs.fasta"
+                )
+                if contigs.suffix == ".gz":
+                    shutil.copy(
+                        contigs, f"{self.outdir}/{output_prefix}.contigs.fasta.gz"
+                    )
+                else:
+                    shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta")
 
-        # Save contigs if requested
-        if self.save_contigs:
+            # Get assembly statistics
+            contig_stats = self._get_contig_stats(contigs)
             logger.info(
-                f"Saving contigs to {self.outdir}/{output_prefix}.contigs.fasta"
+                f"Assembly: {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
             )
-            if contigs.suffix == ".gz":
-                shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta.gz")
-            else:
-                shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta")
 
-        # Get assembly statistics
-        contig_stats = self._get_contig_stats(contigs)
-        logger.info(
-            f"Assembly: {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
-        )
+            # Search contigs against database
+            result = self._search_contigs(
+                contigs=contigs,
+                db_path=db_path,
+                marker=marker if marker is not None else "",
+                min_seq_id=self.min_seq_id,
+                min_aln_len=self.min_aln_len,
+            )
 
-        # Search contigs against database
-        result = self._search_contigs(
-            contigs=contigs,
-            db_path=db_path,
-            marker=marker if marker is not None else "",
-            min_seq_id=self.min_seq_id,
-            min_aln_len=self.min_aln_len,
-        )
-
-        # Handle empty results
-        if result is None or result.empty:
-            logger.warning(f"No results found for {db_name}!")
-            return
+            # Handle empty results: still write a summary, with blank summary and results sections
+            if result is None or result.empty:
+                logger.warning(f"No results found for {db_name}!")
+                result = pd.DataFrame()
 
         # Process results and generate summary
         results_processor = ResultsProcessor(
@@ -340,8 +343,9 @@ class SearchPipeline:
         results_processor.save_summary(self.outdir, output_prefix, marker)
 
         # Print top result summary
-        logger.info(f"Top result for {db_name}:")
-        results_processor.print_result_summary()
+        if not result.empty:
+            logger.info(f"Top result for {db_name}:")
+            results_processor.print_result_summary()
 
     def cleanup(self) -> None:
         """Remove temporary files."""
