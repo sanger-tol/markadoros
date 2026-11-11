@@ -201,4 +201,4 @@ class TestSearchCommand:
             summary_file = Path(outdir) / "icHalSede1.pacbio.nohit.COI.summary.json"
 
             assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert not summary_file.exists()
+            assert summary_file.exists()
