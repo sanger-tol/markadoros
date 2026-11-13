@@ -1,7 +1,25 @@
+import gzip
 import json
+from pathlib import Path
 
 import requests
 from loguru import logger
+
+
+class BinsTaxa:
+    def __init__(self, bins_taxa_path: Path | None = None) -> None:
+        if not bins_taxa_path:
+            self.bins_taxa = {}
+        else:
+            with gzip.open(bins_taxa_path, "rt") as fh:
+                self.bins_taxa = json.load(fh)
+
+    def get_taxon(self, seq_id: str) -> list[str]:
+        parts = seq_id.split("/")
+        if len(parts) >= 2:
+            bin_id = parts[1]
+            return self.bins_taxa.get(bin_id, [])
+        return []
 
 
 class GOATSynonymGetter:

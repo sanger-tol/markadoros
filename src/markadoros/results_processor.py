@@ -1,6 +1,5 @@
-import gzip
 import importlib.metadata
-import json
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +8,18 @@ import pysam
 from loguru import logger
 
 from markadoros.input_types import InputType
+from markadoros.results_models import (
+    ContigStats,
+    ExpectedTaxonInfo,
+    HitRecord,
+    InputInfo,
+    ResultsReport,
+    RunInfo,
+    Summary,
+    TaxonSummary,
+    Tools,
+)
+from markadoros.taxonomy import BinsTaxa
 from markadoros.utils import extract_subsequence, get_mmseqs_version
 
 if TYPE_CHECKING:
@@ -34,7 +45,7 @@ class ResultsProcessor:
         input_type: InputType | None = None,
         n_reads: int | None = None,
         n_aligned_reads: int = 0,
-        contig_stats: dict | None = None,
+        contig_stats: ContigStats | None = None,
         assembler: "AssemblerRunner | None" = None,
         taxa_counts: dict[str, int] | None = None,
         extract_coverage: bool = False,
@@ -68,13 +79,13 @@ class ResultsProcessor:
         )
         self.input_type = input_type or InputType.CONTIGS
 
-        self.bins_taxa = self._load_bins_taxa(bins_taxa_path)
+        self.bins_taxa = BinsTaxa(bins_taxa_path)
 
         # Process results
         self.result = self._process_results(result, contigs, extract_coverage)
 
         # Generate summary
-        self.summary = self._generate_summary(
+        self.report = self._generate_summary(
             input=input,
             taxa_counts=taxa_counts,
             marker=marker,
@@ -85,49 +96,12 @@ class ResultsProcessor:
             assembler=assembler,
         )
 
-    def _load_bins_taxa(self, path) -> dict[str, list[str]]:
-        if not path:
-            return {}
-        with gzip.open(path, "rt") as fh:
-            return json.load(fh)
-
-    def _get_bin_taxa(self, seq_id: str) -> list[str]:
-        parts = seq_id.split("/")
-        if len(parts) >= 2:
-            bin_id = parts[1]
-            return self.bins_taxa.get(bin_id, [])
-        return []
-
-    def _get_expected_taxon_match_type(self, taxon, bin_taxa):
-        """Classify a taxon against expected taxon and synonyms."""
-        if taxon == self.expected_taxon:
-            return "direct_match"
-        if taxon in self.synonyms:
-            return "synonym_match"
-        if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
-            return "bold_bin_contains_expected_taxon"
-        if bin_taxa and any(t in self.synonyms for t in bin_taxa):
-            return "bold_bin_contains_synonym"
-        return "none"
-
-    def _is_expected_taxon(self, taxon, bin_taxa):
-        """Classify a taxon against expected taxon and synonyms."""
-        if taxon == self.expected_taxon:
-            return "true"
-        if taxon in self.synonyms:
-            return "true"
-        if bin_taxa and any(t == self.expected_taxon for t in bin_taxa):
-            return "true"
-        if bin_taxa and any(t in self.synonyms for t in bin_taxa):
-            return "true"
-        return "false"
-
     def _process_results(
         self,
         result: pd.DataFrame,
         contigs: Path | None,
         extract_coverage: bool = False,
-    ) -> pd.DataFrame:
+    ) -> list[HitRecord]:
         """Process and enhance search results.
 
         Extracts marker info from headers, calculates coverage, and sorts results.
@@ -141,7 +115,7 @@ class ResultsProcessor:
             Processed results DataFrame
         """
         if result.empty:
-            return result
+            return []
 
         sequences = {}
         with pysam.FastxFile(str(contigs), persist=False) as fh:
@@ -156,61 +130,19 @@ class ResultsProcessor:
         result["sequence"] = result.apply(
             lambda row: extract_subsequence(row, sequences), axis=1
         )
-        result["bin_taxa"] = result["seq_id"].apply(
-            lambda seq_id: self._get_bin_taxa(seq_id)
-        )
+        records = result.to_dict(orient="records")
 
-        if extract_coverage:
-            result["coverage"] = (
-                result["target"]
-                .str.extract(r"cov_(\d+\.?\d*)", expand=False)
-                .astype(float)
-                .round(2)
-            )
-        else:
-            result["coverage"] = pd.NA
-
-        result = result.sort_values(by=["bits"], ascending=[False])
-
+        results_list = [HitRecord(**record) for record in records]
+        [record.parse_coverage() for record in results_list if extract_coverage]
         if self.expected_taxon:
-            result["is_expected_taxon"] = result.apply(
-                lambda row: self._is_expected_taxon(row["taxon"], row["bin_taxa"]),
-                axis=1,
-            )
-            result["expected_taxon_match_type"] = result.apply(
-                lambda row: self._get_expected_taxon_match_type(
-                    row["taxon"], row["bin_taxa"]
-                ),
-                axis=1,
-            )
-        else:
-            result["is_expected_taxon"] = [None] * len(result)
-            result["expected_taxon_match_type"] = [None] * len(result)
+            for record in results_list:
+                record.set_expected_taxon_fields(
+                    expected_taxon=self.expected_taxon,
+                    synonyms=self.synonyms,
+                    bin_taxa=self.bins_taxa.get_taxon(record.target),
+                )
 
-        result = result.drop(columns=["bin_taxa"])
-
-        # Reorder columns: target, coverage, seq_id, marker, taxon, lineage, then rest
-        desired_cols = [
-            "target",
-            "coverage",
-            "seq_id",
-            "marker",
-            "taxon",
-            "lineage",
-        ]
-
-        # Only include is_expected_taxon if it was created
-        if "is_expected_taxon" in result.columns:
-            desired_cols.append("is_expected_taxon")
-            desired_cols.append("expected_taxon_match_type")
-
-        # Add remaining columns in their original order
-        remaining_cols = [
-            col for col in result.columns if col not in desired_cols and col != "query"
-        ]
-        result = result[desired_cols + remaining_cols]
-
-        return result
+        return results_list
 
     def _generate_summary(
         self,
@@ -220,9 +152,9 @@ class ResultsProcessor:
         database: str,
         n_reads: int | None,
         n_aligned_reads: int,
-        contig_stats: dict | None = None,
+        contig_stats: ContigStats | None = None,
         assembler: "AssemblerRunner | None" = None,
-    ) -> dict:
+    ) -> ResultsReport:
         """Generate summary for processed results.
 
         Args:
@@ -236,155 +168,144 @@ class ResultsProcessor:
             assembler: Assembler instance for version info
 
         Returns:
-            Dictionary with complete summary
+            Validated ResultsReport with complete summary
         """
         # Statistics regarding the expected taxon, if provided
         expectation = (
-            {
-                "taxon": self.expected_taxon,
-                "synonyms": self.synonyms if self.synonyms else None,
-                "counts": taxa_counts,
-            }
+            ExpectedTaxonInfo(
+                taxon=self.expected_taxon,
+                synonyms=self.synonyms if self.synonyms else None,
+                counts=taxa_counts,
+            )
             if self.expected_taxon
-            else {}
+            else None
         )
 
-        if self.result.empty:
-            summary, results = {}, {}
-        else:
-            summary, results = self._summarise_results()
+        summary, results = self._summarise_results()
 
-        output = {
-            "input": {
-                "file": str(input.resolve()),
-                "n_reads": n_reads if self.input_type != InputType.CONTIGS else None,
-                "n_aligned_reads": n_aligned_reads,
-                "marker": marker,
-                "database": database,
-                "contig_stats": contig_stats,
-                "expected_taxon": expectation,
-            },
-            "summary": summary,
-            "results": results,
-            "run_info": {
-                "version": importlib.metadata.version("markadoros"),
-                "tools": {
-                    "mmseqs": get_mmseqs_version(),
-                    "assembler": {assembler.name: assembler._get_version()}
+        report = ResultsReport(
+            input=InputInfo(
+                file=str(input.resolve()),
+                n_reads=n_reads if self.input_type != InputType.CONTIGS else None,
+                n_aligned_reads=n_aligned_reads,
+                marker=marker,
+                database=database,
+                contig_stats=contig_stats,
+                expected_taxon=expectation or None,
+            ),
+            summary=summary,
+            results=results,
+            run_info=RunInfo(
+                version=importlib.metadata.version("markadoros"),
+                tools=Tools(
+                    mmseqs=get_mmseqs_version(),
+                    assembler={assembler.name: assembler._get_version()}
                     if assembler is not None
                     else None,
-                },
-            },
-        }
+                ),
+            ),
+        )
 
-        return output
+        return report
 
-    def _summarise_results(self) -> tuple[dict, dict]:
+    def _summarise_results(
+        self,
+    ) -> tuple[Summary | None, dict[str, list[HitRecord]] | None]:
         """Summarise processed results per taxon and per target contig.
 
         Returns:
             Tuple of (summary, results) for a non-empty result set
         """
+        if len(self.result) == 0:
+            return None, None
+
         # Tally the number of hits per taxon
-        found_taxon_counts = self.result["taxon"].value_counts()
+        found_taxa = {hit.taxon for hit in self.result if hit.taxon is not None}
 
         # Top result - if expected taxon found, top result for taxon, otherwise overall top result
-        top_result = self.result.iloc[0].to_dict()
+        top_result = self.result[0]
 
-        expected_taxon_top_result = {}
+        expected_taxon_top_result = None
         if self.expected_taxon and any(
-            taxon in found_taxon_counts.index for taxon in self.all_taxon_names
+            taxon in found_taxa for taxon in self.all_taxon_names
         ):
-            expected_taxon_top_result = (
-                self.result[self.result["taxon"].isin(self.all_taxon_names)]
-                .iloc[0]
-                .to_dict()
+            expected_taxon_top_result = next(
+                hit for hit in self.result if hit.taxon in self.all_taxon_names
             )
 
         # Summary for each taxon
         taxon_summary = {}
-        for taxon in found_taxon_counts.index:
-            taxon_hits = self.result[self.result["taxon"] == taxon]
-            top_taxon_hit = taxon_hits.iloc[0]
-            taxon_summary[taxon] = {
-                "is_expected_taxon": top_taxon_hit["is_expected_taxon"],
-                "expected_taxon_match_type": top_taxon_hit["expected_taxon_match_type"],
-                "n_hits": len(taxon_hits),
-                "fident_range": [
-                    float(taxon_hits["fident"].min()),
-                    float(taxon_hits["fident"].max()),
-                ],
-                "alnlen_range": [
-                    int(taxon_hits["alnlen"].min()),
-                    int(taxon_hits["alnlen"].max()),
-                ],
-                "top_hit": {
-                    "fident": float(top_taxon_hit["fident"]),
-                    "alnlen": int(top_taxon_hit["alnlen"]),
-                    "tstart": int(top_taxon_hit["tstart"]),
-                    "tend": int(top_taxon_hit["tend"]),
-                    "evalue": float(top_taxon_hit["evalue"]),
-                    "bits": int(top_taxon_hit["bits"]),
-                    "sequence": str(top_taxon_hit["sequence"]),
-                },
-            }
+        for taxon in found_taxa:
+            taxon_hits = [hit for hit in self.result if hit.taxon == taxon]
+            top_taxon_hit = taxon_hits[0]
+            fidents = [hit.fident for hit in taxon_hits]
+            alnlens = [hit.alnlen for hit in taxon_hits]
+            taxon_summary[taxon] = TaxonSummary(
+                is_expected_taxon=top_taxon_hit.is_expected_taxon
+                if top_taxon_hit
+                else None,
+                expected_taxon_match_type=top_taxon_hit.expected_taxon_match_type
+                if top_taxon_hit
+                else None,
+                n_hits=len(taxon_hits),
+                fident_range=(min(fidents), max(fidents)),
+                alnlen_range=(min(alnlens), max(alnlens)),
+                top_hit=top_taxon_hit.to_tophit(),
+            )
 
         # Get the number of hits for the expected taxon
         expected_taxon_counts_in_result = None
         synonym_taxon_counts_in_result = None
         if self.expected_taxon:
-            expected_taxon_counts_in_result = int(
-                found_taxon_counts.get(self.expected_taxon, 0)
+            expected_taxon_counts_in_result = sum(
+                1 if hit.taxon == self.expected_taxon else 0 for hit in self.result
             )
-            synonym_taxon_counts_in_result = int(
-                sum([found_taxon_counts.get(taxon, 0) for taxon in self.synonyms])
+            synonym_taxon_counts_in_result = sum(
+                1 if hit.taxon in self.synonyms else 0 for hit in self.result
             )
             logger.info(
                 f"Found {expected_taxon_counts_in_result} results for {self.expected_taxon} and {synonym_taxon_counts_in_result} for its synonyms."
             )
 
-        summary = {
-            "n_contigs_with_hits": int(self.result["target"].nunique()),
-            "n_expected_taxon_hits": expected_taxon_counts_in_result,
-            "n_synonym_hits": synonym_taxon_counts_in_result,
-            "top_result": top_result,
-            "expected_taxon_top_result": expected_taxon_top_result,
-            "taxon_summary": taxon_summary,
-        }
+        summary = Summary(
+            n_contigs_with_hits=len({hit.target for hit in self.result}),
+            n_expected_taxon_hits=expected_taxon_counts_in_result,
+            n_synonym_hits=synonym_taxon_counts_in_result,
+            top_result=top_result,
+            expected_taxon_top_result=expected_taxon_top_result,
+            taxon_summary=taxon_summary,
+        )
 
-        results = {
-            target: group.to_dict(orient="records")
-            for target, group in self.result.groupby("target")
-        }
+        results = defaultdict(list)
+        for item in self.result:
+            results[item.target].append(item)
 
         return summary, results
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> ResultsReport:
         """Get the generated summary.
 
         Returns:
-            Dictionary with complete summary information
+            ResultsReport with complete summary information
         """
-        return self.summary
+        return self.report
 
     def print_result_summary(self) -> None:
         """Print a summary of the top search result to logger."""
-        if self.result.empty:
+        if len(self.result) == 0:
             return
 
-        out = self.result.head(1).reset_index()
-
-        for _, row in out.iterrows():
+        if out := self.result[0] if self.result else None:
             logger.info(
                 f"""\n
-            \tcontig: {row["target"]}
-            \tmatch_id: {row["seq_id"]}
-            \tmatch_taxon: {row["taxon"]}
-            \tfident: {row["fident"]}
-            \talnlen: {row["alnlen"]}
-            \tcoverage: {row["coverage"]}x
-            \tis_expected_taxon: {row["is_expected_taxon"]}
-            \texpected_taxon_match_type: {row["expected_taxon_match_type"]}
+            \tcontig: {out.target}
+            \tmatch_id: {out.seq_id}
+            \tmatch_taxon: {out.taxon}
+            \tfident: {out.fident}
+            \talnlen: {out.alnlen}
+            \tcoverage: {out.coverage}x
+            \tis_expected_taxon: {out.is_expected_taxon}
+            \texpected_taxon_match_type: {out.expected_taxon_match_type}
             """
             )
 
@@ -397,6 +318,5 @@ class ResultsProcessor:
             marker: Marker name (included in filename)
         """
         output_path = outdir / f"{prefix}.{marker}.summary.json"
-        with open(output_path, "w") as f:
-            json.dump(self.summary, f, indent=4)
+        output_path.write_text(self.report.model_dump_json(indent=4))
         logger.info(f"Saved summary to {output_path}")
