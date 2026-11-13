@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0](https://github.com/sanger-tol/markadoros/releases/tag/v1.3.0) - [2026-11-11]
 
 - If no hits are found, markadoros will now write a JSON file with empty results and summary fields
+- Add a new subcommand, `update-species`, that will update the expected taxon information in a summary JSON file.
 
 ## [[1.2.1](https://github.com/sanger-tol/markadoros/releases/tag/v1.2.1)] - [2026-08-20]
 

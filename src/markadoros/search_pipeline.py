@@ -16,6 +16,7 @@ from markadoros.contig_searcher import ContigSearcher
 from markadoros.input_types import InputType
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
+from markadoros.results_models import ContigStats
 from markadoros.results_processor import ResultsProcessor
 
 if TYPE_CHECKING:
@@ -100,7 +101,7 @@ class SearchPipeline:
 
         return (out_db_path / db.name).resolve()
 
-    def _get_contig_stats(self, contigs: Path) -> dict[str, int]:
+    def _get_contig_stats(self, contigs: Path) -> ContigStats | None:
         """Calculate assembly statistics from contigs.
 
         Args:
@@ -119,7 +120,7 @@ class SearchPipeline:
 
         if not lengths:
             logger.warning("No contigs found in assembly file!")
-            return {"n": 0, "size": 0, "n50": 0, "longest": 0}
+            return None
 
         asm_size = sum(lengths)
         longest = max(lengths)
@@ -133,7 +134,7 @@ class SearchPipeline:
                 n50 = length
                 break
 
-        return {"n": count, "size": asm_size, "n50": n50, "longest": longest}
+        return ContigStats(n=count, size=asm_size, n50=n50, longest=longest)
 
     def _setup_preprocessing(
         self, input: Path, n_reads: int | None, prefix: str
@@ -285,7 +286,7 @@ class SearchPipeline:
 
         if contigs is None:
             logger.warning(f"No contigs available for {db_name}!")
-            contig_stats = {}
+            contig_stats = None
             result = pd.DataFrame()
         else:
             # Save contigs if requested
@@ -302,9 +303,10 @@ class SearchPipeline:
 
             # Get assembly statistics
             contig_stats = self._get_contig_stats(contigs)
-            logger.info(
-                f"Assembly: {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
-            )
+            if contig_stats:
+                logger.info(
+                    f"Assembly: {contig_stats.n} contigs (longest {contig_stats.longest}), with an N50 of {contig_stats.n50}"
+                )
 
             # Search contigs against database
             result = self._search_contigs(
