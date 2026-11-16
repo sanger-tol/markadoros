@@ -1,7 +1,0 @@
-[11:24:03] | markadoros | INFO - Processing BOLD TSV file with Polars: tests/data/BOLD.sub.tsv
-[11:24:03] | markadoros | INFO - Processing 2 records to FASTA: test/tmp/BOLD.BINS.fasta.gz
-[11:24:03] | markadoros | INFO - Splitting BOLD.BINS.fasta.gz by markers: COI
-[11:24:03] | markadoros | INFO - Building MMSeqs2 database for AAA.COI... 
-[11:24:03] | markadoros | INFO - Counting records for AAA.COI...
-[11:24:03] | markadoros | INFO - Created 1 databases! Exiting.
-[11:24:03] | markadoros | INFO - Finished! Database creation completed in 0:00:00.

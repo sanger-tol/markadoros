@@ -1,8 +1,0 @@
---- MMseqs2 Command Execution Log (20261116_112403) ---
-
-Command: /Users/jd42/.homebrew/Caskroom/miniforge/base/envs/markadoros/bin/mmseqs
-Full command: /Users/jd42/.homebrew/Caskroom/miniforge/base/envs/markadoros/bin/mmseqs createdb /Users/jd42/Projects/markadoros/test/tmp/AAA.COI.fa.gz /Users/jd42/Projects/markadoros/test/AAA.COI/db --dbtype 2 -v 1 --threads 11
-
-Return code: 0
-Status: Success
-Output path: /Users/jd42/Projects/markadoros/test/AAA.COI/db
