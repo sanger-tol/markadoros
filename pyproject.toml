@@ -32,7 +32,7 @@ Homepage = "https://github.com/sanger-tol/markadoros/"
 Issues = "https://github.com/sanger-tol/markadoros/issues"
 
 [project.scripts]
-markadoros = "markadoros:cli"
+markadoros = "markadoros.cli:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/markadoros"]

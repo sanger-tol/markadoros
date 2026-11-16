@@ -12,12 +12,12 @@ import pysam
 from loguru import logger
 from pydantic import BaseModel
 
-from markadoros.input_types import InputType
-from markadoros.taxonomy import BinsTaxa
-from markadoros.utils import extract_subsequence, get_mmseqs_version
+from markadoros.taxonomy.taxonomy import BinsTaxa
+from markadoros.utils.input_types import InputType
+from markadoros.utils.utils import extract_subsequence, get_mmseqs_version
 
 if TYPE_CHECKING:
-    from markadoros.assembler_runners import AssemblerRunner
+    from markadoros.assembly.assembler_runners import AssemblerRunner
 
 
 class HitRecord(BaseModel):

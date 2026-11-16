@@ -6,9 +6,9 @@ from pathlib import Path
 
 from loguru import logger
 
-from markadoros.database_fasta_processor import DatabaseFASTAProcessor
-from markadoros.database_index import DatabaseIndex
-from markadoros.mmseqs_database_builder import MMSeqsDatabaseBuilder
+from markadoros.database.database_fasta_processor import DatabaseFASTAProcessor
+from markadoros.database.database_index import DatabaseIndex
+from markadoros.database.mmseqs_database_builder import MMSeqsDatabaseBuilder
 
 
 class DatabaseCreator:
@@ -83,7 +83,9 @@ class DatabaseCreator:
 
             bins_taxa_path = None
             if bins_taxa is not None:
-                bins_taxa_path = self._outdir / f"{prefix}.{params['marker']}" / "bins_taxa.json.gz"
+                bins_taxa_path = (
+                    self._outdir / f"{prefix}.{params['marker']}" / "bins_taxa.json.gz"
+                )
                 with gzip.open(bins_taxa_path, mode="wt") as f:
                     json.dump(bins_taxa, f, indent=2)
 

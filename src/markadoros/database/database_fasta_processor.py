@@ -9,7 +9,7 @@ from Bio.Seq import Seq
 from isal import igzip
 from loguru import logger
 
-from markadoros.header_processor import process_generic_header
+from markadoros.database.header_processor import process_generic_header
 
 
 class DatabaseFASTAProcessor:
@@ -101,8 +101,7 @@ class DatabaseFASTAProcessor:
         logger.info(f"Splitting {fasta.name} by markers: {', '.join(markers)}")
 
         output_handles = {
-            db: igzip.open(self._tmpdir / f"{db}.fa.gz", "wb")
-            for db in databases
+            db: igzip.open(self._tmpdir / f"{db}.fa.gz", "wb") for db in databases
         }
         seen_sequences: dict[str, set[str]] | None = (
             {db: set() for db in databases} if self._deduplicate else None

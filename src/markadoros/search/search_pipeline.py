@@ -11,15 +11,15 @@ import pandas as pd
 import pysam
 from loguru import logger
 
-from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
-from markadoros.contig_searcher import ContigSearcher
-from markadoros.input_types import InputType
-from markadoros.read_assembler import ReadAssembler
-from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.results_models import ContigStats, ResultsReport
+from markadoros.assembly.assembler_runners import HifiasmRunner, SpadesRunner
+from markadoros.assembly.read_assembler import ReadAssembler
+from markadoros.reads.read_preprocessor import ReadPreprocessor
+from markadoros.search.contig_searcher import ContigSearcher
+from markadoros.summary.results_models import ContigStats, ResultsReport
+from markadoros.utils.input_types import InputType
 
 if TYPE_CHECKING:
-    from markadoros.assembler_runners import AssemblerRunner
+    from markadoros.assembly.assembler_runners import AssemblerRunner
 
 
 class SearchPipeline:

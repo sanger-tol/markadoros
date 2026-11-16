@@ -4,7 +4,7 @@ import pysam
 from isal import igzip
 from loguru import logger
 
-from markadoros.utils import get_simple_name
+from markadoros.utils.utils import get_simple_name
 
 
 class ReadPreprocessor:
