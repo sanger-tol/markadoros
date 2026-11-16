@@ -3,23 +3,23 @@ from __future__ import annotations
 import gzip
 import json
 import shutil
-from math import floor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
-import pysam
 from loguru import logger
 
-from markadoros.assembler_runners import HifiasmRunner, SpadesRunner
-from markadoros.contig_searcher import ContigSearcher
-from markadoros.input_types import InputType
-from markadoros.read_assembler import ReadAssembler
-from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.results_processor import ResultsProcessor
+from markadoros.assembly.assembler_runners import HifiasmRunner, SpadesRunner
+from markadoros.assembly.contigs import Contigs
+from markadoros.assembly.read_assembler import ReadAssembler
+from markadoros.database.database_index import DatabaseEntry
+from markadoros.reads.read_preprocessor import ReadPreprocessor
+from markadoros.search.contig_searcher import ContigSearcher
+from markadoros.summary.results_models import ExpectedTaxonInfo, ResultsReport
+from markadoros.utils.input_types import InputType
 
 if TYPE_CHECKING:
-    from markadoros.assembler_runners import AssemblerRunner
+    from markadoros.assembly.assembler_runners import AssemblerRunner
 
 
 class SearchPipeline:
@@ -35,11 +35,10 @@ class SearchPipeline:
         outdir: Path,
         tmpdir: Path,
         threads: int,
-        database_index: dict[str, dict],
+        database_index: dict[str, DatabaseEntry],
         db_to_tmpdir: bool,
         input_type: InputType,
-        expected_taxon: str | None,
-        synonyms: list[str],
+        expected_taxon: ExpectedTaxonInfo | None,
         min_seq_id: float,
         min_aln_len: int,
         save_contigs: bool,
@@ -54,8 +53,6 @@ class SearchPipeline:
         self.db_to_tmpdir = db_to_tmpdir
         self.input_type = input_type
         self.expected_taxon = expected_taxon
-        self.synonyms = synonyms
-        self.all_taxon_names = [expected_taxon] + synonyms if expected_taxon else []
         self.min_seq_id = min_seq_id
         self.min_aln_len = min_aln_len
         self.save_contigs = save_contigs
@@ -99,41 +96,6 @@ class SearchPipeline:
                 shutil.copy2(file, out_db_path / file.name)
 
         return (out_db_path / db.name).resolve()
-
-    def _get_contig_stats(self, contigs: Path) -> dict[str, int]:
-        """Calculate assembly statistics from contigs.
-
-        Args:
-            contigs: Path to contigs FASTA file
-
-        Returns:
-            Dictionary with assembly statistics (n, size, n50, longest)
-        """
-        count = 0
-        lengths: list[int] = []
-        with pysam.FastxFile(str(contigs)) as asm:
-            for record in asm:
-                count += 1
-                if record.sequence is not None:
-                    lengths.append(len(record.sequence))
-
-        if not lengths:
-            logger.warning("No contigs found in assembly file!")
-            return {"n": 0, "size": 0, "n50": 0, "longest": 0}
-
-        asm_size = sum(lengths)
-        longest = max(lengths)
-
-        lengths.sort(reverse=True)
-        cumulative_sum = 0
-        n50 = 0
-        for length in lengths:
-            cumulative_sum += length
-            if cumulative_sum >= floor(asm_size / 2):
-                n50 = length
-                break
-
-        return {"n": count, "size": asm_size, "n50": n50, "longest": longest}
 
     def _setup_preprocessing(
         self, input: Path, n_reads: int | None, prefix: str
@@ -244,7 +206,7 @@ class SearchPipeline:
         # Validate database exists
         if db_name not in self.database_index:
             raise ValueError(f"Database {db_name} not found in index!")
-        db_params = self.database_index[db_name]
+        db_entry = self.database_index[db_name]
 
         # Setup preprocessing and assembly if working with reads
         read_assembler, subsampled_reads = self._setup_preprocessing(
@@ -256,38 +218,40 @@ class SearchPipeline:
         # Setup database (copy to tmpdir if requested)
         if self.db_to_tmpdir:
             logger.info(f"Cloning database {db_name}...")
-            db_path = self._setup_database(Path(db_params["db"]), output_prefix)
+            db_path = self._setup_database(db_entry.db, output_prefix)
         else:
-            db_path = Path(db_params["db"])
+            db_path = db_entry.db
 
         # Get taxon count expectation
-        taxa_counts = {}
+        expectation = None
         if self.expected_taxon:
             taxa_counts = self._get_taxa_counts(
-                self.all_taxon_names, db_params["taxon_db"]
+                self.expected_taxon.names, db_entry.taxon_db
             )
-            expected_taxon_count = taxa_counts.get(self.expected_taxon, 0)
+            expectation = self.expected_taxon.model_copy(update={"counts": taxa_counts})
+            expected_taxon_count = taxa_counts.get(self.expected_taxon.taxon, 0)
             synonym_count = sum(taxa_counts.values()) - expected_taxon_count
             logger.info(
-                f"There are {expected_taxon_count} possible records for {self.expected_taxon}, and {synonym_count} for synonyms."
+                f"There are {expected_taxon_count} possible records for {self.expected_taxon.taxon}, and {synonym_count} for synonyms."
             )
 
-        marker = db_params["marker"]
+        marker = db_entry.marker
 
         # Get contigs (either from input or assembly)
         n_aligned_reads, contigs = self._get_contigs(
             input=input,
             read_assembler=read_assembler,
             subsampled_reads=subsampled_reads,
-            marker=marker if marker is not None else "",
+            marker=marker,
             db_path=db_path,
         )
 
+        contig_set: Contigs | None = None
         if contigs is None:
             logger.warning(f"No contigs available for {db_name}!")
-            contig_stats = {}
             result = pd.DataFrame()
         else:
+            contig_set = Contigs(contigs)
             # Save contigs if requested
             if self.save_contigs:
                 logger.info(
@@ -301,16 +265,17 @@ class SearchPipeline:
                     shutil.copy(contigs, f"{self.outdir}/{output_prefix}.contigs.fasta")
 
             # Get assembly statistics
-            contig_stats = self._get_contig_stats(contigs)
-            logger.info(
-                f"Assembly: {contig_stats['n']} contigs (longest {contig_stats['longest']}), with an N50 of {contig_stats['n50']}"
-            )
+            contig_stats = contig_set._get_stats()
+            if contig_stats:
+                logger.info(
+                    f"Assembly: {contig_stats.n} contigs (longest {contig_stats.longest}), with an N50 of {contig_stats.n50}"
+                )
 
             # Search contigs against database
             result = self._search_contigs(
                 contigs=contigs,
                 db_path=db_path,
-                marker=marker if marker is not None else "",
+                marker=marker,
                 min_seq_id=self.min_seq_id,
                 min_aln_len=self.min_aln_len,
             )
@@ -321,31 +286,30 @@ class SearchPipeline:
                 result = pd.DataFrame()
 
         # Process results and generate summary
-        results_processor = ResultsProcessor(
+        report = ResultsReport.from_search_results(
             result=result,
-            contigs=contigs,
+            contigs=contig_set,
             input=input,
             marker=marker,
-            database=str(db_params["db"]),
-            expected_taxon=self.expected_taxon,
-            synonyms=self.synonyms,
+            database=str(db_entry.db),
+            expected_taxon=expectation,
             input_type=self.input_type,
             n_reads=n_reads,
             n_aligned_reads=n_aligned_reads,
-            contig_stats=contig_stats,
             assembler=self.assembler,
-            taxa_counts=taxa_counts,
             extract_coverage=(self.input_type != InputType.CONTIGS),
-            bins_taxa_path=db_params["bins_taxa"],
+            bins_taxa_path=db_entry.bins_taxa,
         )
 
         # Save summary
-        results_processor.save_summary(self.outdir, output_prefix, marker)
+        summary_path = self.outdir / f"{output_prefix}.{marker}.summary.json"
+        summary_path.write_text(report.model_dump_json(indent=4))
+        logger.info(f"Saved summary to {summary_path}")
 
         # Print top result summary
         if not result.empty:
             logger.info(f"Top result for {db_name}:")
-            results_processor.print_result_summary()
+            report.print_result_summary()
 
     def cleanup(self) -> None:
         """Remove temporary files."""

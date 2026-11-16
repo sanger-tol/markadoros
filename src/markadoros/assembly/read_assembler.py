@@ -8,9 +8,9 @@ from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import SearchConfig as MMSeqsSearchConfig
 from pymmseqs.parsers import SearchParser as MMSeqsSearchParser
 
-from markadoros.assembler_runners import AssemblerRunner
-from markadoros.input_types import InputType
-from markadoros.read_preprocessor import ReadPreprocessor
+from markadoros.assembly.assembler_runners import AssemblerRunner
+from markadoros.reads.read_preprocessor import ReadPreprocessor
+from markadoros.utils.input_types import InputType
 
 
 class ReadAssembler:
