@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - If no hits are found, markadoros will now write a JSON file with empty results and summary fields
 - Add a new subcommand, `update-species`, that will update the expected taxon information in a summary JSON file.
+- Reorganise code to make greater use of Pydantic models for data validation and type checking.
 
 ## [[1.2.1](https://github.com/sanger-tol/markadoros/releases/tag/v1.2.1)] - [2026-08-20]
 
