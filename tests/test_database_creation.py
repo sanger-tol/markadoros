@@ -37,175 +37,175 @@ class TestBOLDFastaDatabase:
 
     def test_bold_fasta_database_creation(self, cli_runner, test_data_dir, tmp_path):
         """Test basic BOLD FASTA database creation with COI marker."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "bold",
-                    "--prefix",
-                    "BOLD",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "bold",
+                "--prefix",
+                "BOLD",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_fasta_with_exclude_file(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD FASTA database creation with exclude patterns."""
         exclude_file = test_data_dir / "wolbachia.exclude"
 
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "bold",
-                    "--prefix",
-                    "BOLD",
-                    "--exclude-file",
-                    str(exclude_file),
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "bold",
+                "--prefix",
+                "BOLD",
+                "--exclude-file",
+                str(exclude_file),
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_fasta_with_min_length(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD FASTA database creation with minimum length filter."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "bold",
-                    "--prefix",
-                    "BOLD",
-                    "--min-length",
-                    "500",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "bold",
+                "--prefix",
+                "BOLD",
+                "--min-length",
+                "500",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_fasta_with_create_index(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD FASTA database creation with index creation."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "bold",
-                    "--prefix",
-                    "BOLD",
-                    "--create-index",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "bold",
+                "--prefix",
+                "BOLD",
+                "--create-index",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_fasta_no_cleanup(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD FASTA database creation without cleanup of temporary files."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "bold",
-                    "--prefix",
-                    "BOLD",
-                    "--no-cleanup",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "bold",
+                "--prefix",
+                "BOLD",
+                "--no-cleanup",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_unite_fasta_database_creation(self, cli_runner, test_data_dir, tmp_path):
         """Test basic BOLD FASTA database creation with COI marker."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "unite",
-                    "--prefix",
-                    "UNITE",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "UNITE.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "unite",
+                "--prefix",
+                "UNITE",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "UNITE.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "UNITE", "ITS")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "UNITE", "ITS")
 
     def test_silva_ssu_fasta_database_creation(
         self, cli_runner, test_data_dir, tmp_path
     ):
         """Test basic BOLD FASTA database creation with COI marker."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "silva_ssu",
-                    "--prefix",
-                    "SILVA",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "SILVA.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "silva_ssu",
+                "--prefix",
+                "SILVA",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "SILVA.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "SILVA", "SSU")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "SILVA", "SSU")
 
     def test_silva_lsu_fasta_database_creation(
         self, cli_runner, test_data_dir, tmp_path
     ):
         """Test basic BOLD FASTA database creation with COI marker."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "database",
-                    "-x",
-                    "silva_lsu",
-                    "--prefix",
-                    "SILVA",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "SILVA.sub.fa.gz")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "database",
+                "-x",
+                "silva_lsu",
+                "--prefix",
+                "SILVA",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "SILVA.sub.fa.gz")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "SILVA", "LSU")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "SILVA", "LSU")
 
 
 class TestBOLDTSVDatabase:
@@ -213,98 +213,98 @@ class TestBOLDTSVDatabase:
 
     def test_bold_tsv_database_creation(self, cli_runner, test_data_dir, tmp_path):
         """Test basic BOLD TSV database creation."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "bold-coi-from-tsv",
-                    "--prefix",
-                    "BOLD",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.tsv")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "bold-coi-from-tsv",
+                "--prefix",
+                "BOLD",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.tsv")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_tsv_with_exclude_file(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD TSV database creation with exclude patterns."""
         exclude_file = test_data_dir / "wolbachia.exclude"
 
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "bold-coi-from-tsv",
-                    "--prefix",
-                    "BOLD",
-                    "--exclude-file",
-                    str(exclude_file),
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.tsv")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "bold-coi-from-tsv",
+                "--prefix",
+                "BOLD",
+                "--exclude-file",
+                str(exclude_file),
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.tsv")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_tsv_with_min_length(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD TSV database creation with minimum length filter."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "bold-coi-from-tsv",
-                    "--prefix",
-                    "BOLD",
-                    "--min-length",
-                    "500",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.tsv")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "bold-coi-from-tsv",
+                "--prefix",
+                "BOLD",
+                "--min-length",
+                "500",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.tsv")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_tsv_with_create_index(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD TSV database creation with index creation."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "bold-coi-from-tsv",
-                    "--prefix",
-                    "BOLD",
-                    "--create-index",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.tsv")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "bold-coi-from-tsv",
+                "--prefix",
+                "BOLD",
+                "--create-index",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.tsv")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
 
     def test_bold_tsv_no_cleanup(self, cli_runner, test_data_dir, tmp_path):
         """Test BOLD TSV database creation without cleanup of temporary files."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_path) as outdir:
-            result = cli_runner.invoke(
-                cli,
-                [
-                    "bold-coi-from-tsv",
-                    "--prefix",
-                    "BOLD",
-                    "--no-cleanup",
-                    "--outdir",
-                    str(outdir),
-                    str(Path(test_data_dir / "BOLD.sub.tsv")),
-                ],
-            )
+        outdir = tmp_path
+        result = cli_runner.invoke(
+            cli,
+            [
+                "bold-coi-from-tsv",
+                "--prefix",
+                "BOLD",
+                "--no-cleanup",
+                "--outdir",
+                str(outdir),
+                str(Path(test_data_dir / "BOLD.sub.tsv")),
+            ],
+        )
 
-            assert result.exit_code == 0, f"Command failed with: {result.output}"
-            assert_db_files(outdir, "BOLD", "COI")
+        assert result.exit_code == 0, f"Command failed with: {result.output}"
+        assert_db_files(outdir, "BOLD", "COI")
