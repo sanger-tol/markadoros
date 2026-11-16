@@ -109,6 +109,8 @@ If your FASTA release does not conform to the above presets, set `-x` to `generi
 ><unique_id>|<marker>|<taxon_name>|<lineage>
 ```
 
+In this case, `taxon_name` should be an `_` separated species binomial, or a single-name higher taxonomic rank (e.g. "Insecta"). `lineage` should be a taxonomic lineage string in whatever format you would like, as long as it does not include the `|` character.
+
 **Output files:**
 
 - `db.json` - Index of available databases and their parameters
