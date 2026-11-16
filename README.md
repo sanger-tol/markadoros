@@ -210,6 +210,16 @@ The search subtool outputs a JSON file summarising the search. It has the follow
 
 ```
 
+### Updating a summary file
+
+Sometimes, you may wish to change the expected taxon without re-running markadoros. The `update-species` command makes this simple:
+
+```
+markadoros update-species --expected-taxon "Homo sapiens" -o summary.corrected.json summary.json
+```
+
+It has the same taxonomy options as `search`: it can find GOAT synonyms with `--find-goat-synonyms`, or you can provide your own list of synonyms with `--synonyms`.
+
 ### Example Workflows
 
 **Building a marker database for the BOLD FASTA release:**
