@@ -16,8 +16,7 @@ from markadoros.contig_searcher import ContigSearcher
 from markadoros.input_types import InputType
 from markadoros.read_assembler import ReadAssembler
 from markadoros.read_preprocessor import ReadPreprocessor
-from markadoros.results_models import ContigStats
-from markadoros.results_processor import ResultsProcessor
+from markadoros.results_models import ContigStats, ResultsReport
 
 if TYPE_CHECKING:
     from markadoros.assembler_runners import AssemblerRunner
@@ -323,7 +322,7 @@ class SearchPipeline:
                 result = pd.DataFrame()
 
         # Process results and generate summary
-        results_processor = ResultsProcessor(
+        report = ResultsReport.from_search_results(
             result=result,
             contigs=contigs,
             input=input,
@@ -342,12 +341,14 @@ class SearchPipeline:
         )
 
         # Save summary
-        results_processor.save_summary(self.outdir, output_prefix, marker)
+        summary_path = self.outdir / f"{output_prefix}.{marker}.summary.json"
+        summary_path.write_text(report.model_dump_json(indent=4))
+        logger.info(f"Saved summary to {summary_path}")
 
         # Print top result summary
         if not result.empty:
             logger.info(f"Top result for {db_name}:")
-            results_processor.print_result_summary()
+            report.print_result_summary()
 
     def cleanup(self) -> None:
         """Remove temporary files."""
