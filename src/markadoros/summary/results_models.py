@@ -12,9 +12,9 @@ import pysam
 from loguru import logger
 from pydantic import BaseModel, field_validator, model_validator
 
+from markadoros.database.sequence_header import SequenceHeader
 from markadoros.taxonomy.taxonomy import BinsTaxa
 from markadoros.utils.input_types import InputType
-from markadoros.utils.sequence_header import SequenceHeader
 from markadoros.utils.utils import extract_subsequence, get_mmseqs_version
 
 if TYPE_CHECKING:
