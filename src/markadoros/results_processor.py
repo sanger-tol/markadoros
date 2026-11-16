@@ -130,6 +130,7 @@ class ResultsProcessor:
         result["sequence"] = result.apply(
             lambda row: extract_subsequence(row, sequences), axis=1
         )
+        result = result.sort_values(by=["evalue"], ascending=[False])
         records = result.to_dict(orient="records")
 
         results_list = [HitRecord(**record) for record in records]

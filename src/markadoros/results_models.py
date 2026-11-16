@@ -168,6 +168,26 @@ class ResultsReport(BaseModel):
             counts=taxa.get(expected_taxon, None),
         )
 
+        if self.results is not None and self.summary is not None:
+            flat_records = sorted(
+                (hit for hits in self.results.values() for hit in hits),
+                key=lambda hit: hit.evalue,
+            )
+            expected_taxon_hits = [
+                hit for hit in flat_records if hit.is_expected_taxon is True
+            ]
+            synonym_hits = [
+                hit
+                for hit in flat_records
+                if hit.expected_taxon_match_type == "synonym_match"
+            ]
+            if expected_taxon_hits:
+                self.summary.n_expected_taxon_hits = len(expected_taxon_hits)
+                self.summary.n_synonym_hits = len(synonym_hits)
+                self.summary.expected_taxon_top_result = (
+                    expected_taxon_hits[0] if expected_taxon_hits else None
+                )
+
     def iter_hit_records(self) -> Iterator[HitRecord]:
         """Yield every HitRecord in the summary and per-target results."""
         if self.summary is not None:
