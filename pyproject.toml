@@ -15,7 +15,6 @@ dependencies = [
     "biopython>=1.86",
     "click>=8.3.1",
     "isal>=1.8.0",
-    "jsonschema>=4.26.0",
     "loguru>=0.7.3",
     "pandas>=2.3.3",
     "polars>=1.39.3",

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import pysam
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from markadoros.taxonomy.taxonomy import BinsTaxa
 from markadoros.utils.input_types import InputType
@@ -18,6 +18,7 @@ from markadoros.utils.utils import extract_subsequence, get_mmseqs_version
 
 if TYPE_CHECKING:
     from markadoros.assembly.assembler_runners import AssemblerRunner
+    from markadoros.assembly.contigs import Contigs
 
 
 class HitRecord(BaseModel):
@@ -46,29 +47,6 @@ class HitRecord(BaseModel):
     def parse_coverage(self) -> None:
         match = re.search(r"cov_(\d+\.?\d*)", self.target)
         self.coverage = round(float(match.group(1)), 2) if match else None
-
-    def set_expected_taxon_fields(
-        self,
-        expected_taxon: str | None,
-        synonyms: list[str] | None,
-        bin_taxa: list[str] | None,
-    ) -> None:
-        """Classify a taxon against expected taxon and synonyms."""
-        if self.taxon == expected_taxon:
-            self.is_expected_taxon = True
-            self.expected_taxon_match_type = "direct_match"
-        elif synonyms and self.taxon in synonyms:
-            self.is_expected_taxon = True
-            self.expected_taxon_match_type = "synonym_match"
-        elif bin_taxa and any(t == expected_taxon for t in bin_taxa):
-            self.is_expected_taxon = True
-            self.expected_taxon_match_type = "bold_bin_contains_expected_taxon"
-        elif bin_taxa and synonyms and any(t in synonyms for t in bin_taxa):
-            self.is_expected_taxon = True
-            self.expected_taxon_match_type = "bold_bin_contains_synonym"
-        else:
-            self.is_expected_taxon = False
-            self.expected_taxon_match_type = None
 
     def to_tophit(self):
         """Return a TopHit object with a subset of the fields."""
@@ -114,9 +92,40 @@ class Summary(BaseModel):
 
 
 class ExpectedTaxonInfo(BaseModel):
+    """The taxon a run is searching for, its synonyms, and their counts in the database."""
+
     taxon: str
-    synonyms: list[str] | None
-    counts: dict[str, int] | None
+    synonyms: list[str] | None = None
+    counts: dict[str, int] | None = None
+
+    @field_validator("synonyms")
+    @classmethod
+    def normalise_synonyms(cls, synonyms: list[str] | None) -> list[str] | None:
+        return synonyms or None
+
+    @property
+    def names(self) -> list[str]:
+        """The expected taxon followed by its synonyms."""
+        return [self.taxon, *(self.synonyms or [])]
+
+    def annotate_hit(self, hit: HitRecord, bin_taxa: list[str] | None) -> None:
+        """Set whether a hit's taxon matches the expected taxon or its synonyms."""
+        synonyms = self.synonyms or []
+        if hit.taxon == self.taxon:
+            hit.is_expected_taxon = True
+            hit.expected_taxon_match_type = "direct_match"
+        elif synonyms and hit.taxon in synonyms:
+            hit.is_expected_taxon = True
+            hit.expected_taxon_match_type = "synonym_match"
+        elif bin_taxa and any(t == self.taxon for t in bin_taxa):
+            hit.is_expected_taxon = True
+            hit.expected_taxon_match_type = "bold_bin_contains_expected_taxon"
+        elif bin_taxa and synonyms and any(t in synonyms for t in bin_taxa):
+            hit.is_expected_taxon = True
+            hit.expected_taxon_match_type = "bold_bin_contains_synonym"
+        else:
+            hit.is_expected_taxon = False
+            hit.expected_taxon_match_type = None
 
 
 class ContigStats(BaseModel):
@@ -132,7 +141,7 @@ class InputInfo(BaseModel):
     file: Path
     n_reads: int | None
     n_aligned_reads: int
-    marker: str | None
+    marker: str
     database: Path
     contig_stats: ContigStats | None
     expected_taxon: ExpectedTaxonInfo | None
@@ -160,18 +169,15 @@ class ResultsReport(BaseModel):
     def from_search_results(
         cls,
         result: pd.DataFrame,
-        contigs: Path | None,
+        contigs: "Contigs | None",
         input: Path,
-        marker: str | None,
+        marker: str,
         database: str,
-        expected_taxon: str | None = None,
-        synonyms: list[str] | None = None,
+        expected_taxon: ExpectedTaxonInfo | None = None,
         input_type: InputType | None = None,
         n_reads: int | None = None,
         n_aligned_reads: int = 0,
-        contig_stats: ContigStats | None = None,
         assembler: "AssemblerRunner | None" = None,
-        taxa_counts: dict[str, int] | None = None,
         extract_coverage: bool = False,
         bins_taxa_path: Path | None = None,
     ) -> "ResultsReport":
@@ -179,42 +185,34 @@ class ResultsReport(BaseModel):
 
         Args:
             result: DataFrame with raw search results
-            contigs: Path to contigs file, or None if no contigs were available
+            contigs: Contigs object for the contigs file, or None if no contigs were available
             input: Path to input file
             marker: Marker name
             database: Database path/name
-            expected_taxon: Expected taxon name (optional)
-            synonyms: List of synonym taxon names (optional)
+            expected_taxon: Expected taxon with its synonyms and database counts (optional)
             input_type: Type of input (reads/contigs)
             n_reads: Number of reads processed
             n_aligned_reads: Number of reads with alignments
-            contig_stats: Assembly statistics
             assembler: Assembler instance for version info
-            taxa_counts: Expected taxon counts from database
+
             extract_coverage: Whether to extract coverage from contigs
             bins_taxa_path: Path to a gzipped JSON file containing the list of taxon names attached to each BOLD BIN
 
         Returns:
             ResultsReport with processed hits and summary
         """
-        synonyms = synonyms or []
         input_type = input_type or InputType.CONTIGS
         bins_taxa = BinsTaxa(bins_taxa_path)
+        contig_stats = contigs._get_stats() if contigs is not None else None
 
         hits = cls._process_results(
-            result, contigs, extract_coverage, expected_taxon, synonyms, bins_taxa
+            result,
+            contigs.path if contigs is not None else None,
+            extract_coverage,
+            expected_taxon,
+            bins_taxa,
         )
-        summary, results = cls._summarise_results(hits, expected_taxon, synonyms)
-
-        expectation = (
-            ExpectedTaxonInfo(
-                taxon=expected_taxon,
-                synonyms=synonyms or None,
-                counts=taxa_counts,
-            )
-            if expected_taxon
-            else None
-        )
+        summary, results = cls._summarise_results(hits, expected_taxon)
 
         return cls(
             input=InputInfo(
@@ -224,7 +222,7 @@ class ResultsReport(BaseModel):
                 marker=marker,
                 database=database,
                 contig_stats=contig_stats,
-                expected_taxon=expectation,
+                expected_taxon=expected_taxon,
             ),
             summary=summary,
             results=results,
@@ -244,8 +242,7 @@ class ResultsReport(BaseModel):
         result: pd.DataFrame,
         contigs: Path | None,
         extract_coverage: bool,
-        expected_taxon: str | None,
-        synonyms: list[str],
+        expected_taxon: ExpectedTaxonInfo | None,
         bins_taxa: BinsTaxa,
     ) -> list[HitRecord]:
         """Process and enhance search results.
@@ -278,19 +275,14 @@ class ResultsReport(BaseModel):
         [record.parse_coverage() for record in results_list if extract_coverage]
         if expected_taxon:
             for record in results_list:
-                record.set_expected_taxon_fields(
-                    expected_taxon=expected_taxon,
-                    synonyms=synonyms,
-                    bin_taxa=bins_taxa.get_taxon(record.target),
-                )
+                expected_taxon.annotate_hit(record, bins_taxa.get_taxon(record.target))
 
         return results_list
 
     @staticmethod
     def _summarise_results(
         hits: list[HitRecord],
-        expected_taxon: str | None,
-        synonyms: list[str],
+        expected_taxon: ExpectedTaxonInfo | None,
     ) -> tuple[Summary | None, dict[str, list[HitRecord]] | None]:
         """Summarise processed hits per taxon and per target contig.
 
@@ -300,7 +292,7 @@ class ResultsReport(BaseModel):
         if len(hits) == 0:
             return None, None
 
-        all_taxon_names = [expected_taxon, *synonyms] if expected_taxon else []
+        all_taxon_names = expected_taxon.names if expected_taxon else []
 
         # Tally the number of hits per taxon
         found_taxa = {hit.taxon for hit in hits if hit.taxon is not None}
@@ -334,14 +326,15 @@ class ResultsReport(BaseModel):
         expected_taxon_counts_in_result = None
         synonym_taxon_counts_in_result = None
         if expected_taxon:
+            synonyms = expected_taxon.synonyms or []
             expected_taxon_counts_in_result = sum(
-                1 if hit.taxon == expected_taxon else 0 for hit in hits
+                1 if hit.taxon == expected_taxon.taxon else 0 for hit in hits
             )
             synonym_taxon_counts_in_result = sum(
                 1 if hit.taxon in synonyms else 0 for hit in hits
             )
             logger.info(
-                f"Found {expected_taxon_counts_in_result} results for {expected_taxon} and {synonym_taxon_counts_in_result} for its synonyms."
+                f"Found {expected_taxon_counts_in_result} results for {expected_taxon.taxon} and {synonym_taxon_counts_in_result} for its synonyms."
             )
 
         summary = Summary(
@@ -380,25 +373,23 @@ class ResultsReport(BaseModel):
 
     def update_expected_species(
         self,
-        expected_taxon: str,
-        synonyms: list[str] | None,
+        expected_taxon: ExpectedTaxonInfo,
         bin_taxa: BinsTaxa | None,
     ):
         for hit in self.iter_hit_records():
-            hit.set_expected_taxon_fields(
-                expected_taxon=expected_taxon,
-                synonyms=synonyms,
-                bin_taxa=bin_taxa.get_taxon(hit.target) if bin_taxa else None,
+            expected_taxon.annotate_hit(
+                hit, bin_taxa.get_taxon(hit.target) if bin_taxa else None
             )
 
         with gzip.open(self.input.database.parent / "taxon.json.gz", "rt") as fh:
             taxa = json.load(fh)
 
-        expected_names = [expected_taxon, *(synonyms or [])]
-        self.input.expected_taxon = ExpectedTaxonInfo(
-            taxon=expected_taxon,
-            synonyms=synonyms,
-            counts={name: taxa[name] for name in expected_names if name in taxa},
+        self.input.expected_taxon = expected_taxon.model_copy(
+            update={
+                "counts": {
+                    name: taxa[name] for name in expected_taxon.names if name in taxa
+                }
+            }
         )
 
         if self.results is not None and self.summary is not None:
@@ -419,6 +410,12 @@ class ResultsReport(BaseModel):
             self.summary.expected_taxon_top_result = (
                 expected_taxon_hits[0] if expected_taxon_hits else None
             )
+            for taxon, taxon_summary in self.summary.taxon_summary.items():
+                representative = next(hit for hit in flat_records if hit.taxon == taxon)
+                taxon_summary.is_expected_taxon = representative.is_expected_taxon
+                taxon_summary.expected_taxon_match_type = (
+                    representative.expected_taxon_match_type
+                )
 
     def iter_hit_records(self) -> Iterator[HitRecord]:
         """Yield every HitRecord in the summary and per-target results."""

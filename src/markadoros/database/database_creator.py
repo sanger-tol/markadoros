@@ -7,7 +7,7 @@ from pathlib import Path
 from loguru import logger
 
 from markadoros.database.database_fasta_processor import DatabaseFASTAProcessor
-from markadoros.database.database_index import DatabaseIndex
+from markadoros.database.database_index import DatabaseEntry, DatabaseIndex
 from markadoros.database.mmseqs_database_builder import MMSeqsDatabaseBuilder
 
 
@@ -89,15 +89,16 @@ class DatabaseCreator:
                 with gzip.open(bins_taxa_path, mode="wt") as f:
                     json.dump(bins_taxa, f, indent=2)
 
-            # Add the database path and build FASTA to the db dict, and
-            # remove the temporary FASTA file from it
-            db_entry = {
-                **params,
-                "built_from": str(fasta.resolve()),
-                "deduplicated": self.deduplicate,
-                "clustered": self.cluster,
-                "bins_taxa": bins_taxa_path,
-            }
+            db_entry = DatabaseEntry(
+                marker=params["marker"],
+                db=params["db"],
+                taxon_db=params["taxon_db"],
+                n_seqs=params["n_seqs"],
+                built_from=fasta,
+                deduplicated=self.deduplicate,
+                clustered=self.cluster,
+                bins_taxa=bins_taxa_path,
+            )
 
             # Add the database entry to the index
             self._db_index.add_entry(database, db_entry)

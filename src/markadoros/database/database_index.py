@@ -1,45 +1,44 @@
-import json
 from pathlib import Path
+
+from pydantic import BaseModel, Field, RootModel, field_validator
+
+
+class DatabaseEntry(BaseModel):
+    """Metadata for one marker database recorded in the index."""
+
+    marker: str
+    db: Path
+    taxon_db: Path
+    n_seqs: int | None = Field(default=None, ge=0)
+    built_from: Path | None = None
+    deduplicated: bool | None = None
+    clustered: bool | None = None
+    bins_taxa: Path | None = None
+
+    @field_validator("db", "taxon_db", "built_from", "bins_taxa")
+    @classmethod
+    def _resolve_paths(cls, value: Path | None) -> Path | None:
+        return value.resolve() if value is not None else None
+
+
+class DatabaseIndexFile(RootModel[dict[str, DatabaseEntry]]):
+    """The full db.json index, keyed by database name (e.g. BOLD.COI)."""
 
 
 class DatabaseIndex:
-    """Manages JSON metadata index for marker databases."""
+    """Manages the validated JSON metadata index for marker databases."""
 
     def __init__(self, index_path: Path):
         self._index_path = index_path
 
-    def _load(self) -> dict:
-        """Load the database index from disk."""
-        try:
-            with open(self._index_path, "r") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
+    def load(self) -> dict[str, DatabaseEntry]:
+        """Load and validate the index. Raises if the file is missing or invalid."""
+        return DatabaseIndexFile.model_validate_json(self._index_path.read_text()).root
 
-    def _save(self, data: dict) -> None:
-        """Save the database index to disk."""
-        with open(self._index_path, "w") as f:
-            json.dump(data, f, indent=2)
-
-    def _convert_paths(self, entry: dict) -> dict:
-        """Recursively convert all Path objects to strings in a dictionary."""
-        converted = {}
-        for key, value in entry.items():
-            if isinstance(value, Path):
-                converted[key] = str(value.resolve())
-            elif isinstance(value, dict):
-                converted[key] = self._convert_paths(value)
-            elif isinstance(value, list):
-                converted[key] = [
-                    str(v.resolve()) if isinstance(v, Path) else v for v in value
-                ]
-            else:
-                converted[key] = value
-
-        return converted
-
-    def add_entry(self, marker_name: str, db_entry: dict) -> None:
-        """Add or update an entry in the database index."""
-        db_dict = self._load()
-        db_dict[marker_name] = self._convert_paths(db_entry)
-        self._save(db_dict)
+    def add_entry(self, name: str, entry: DatabaseEntry) -> None:
+        """Add or update an entry, keeping any existing entries."""
+        entries = self.load() if self._index_path.exists() else {}
+        entries[name] = entry
+        self._index_path.write_text(
+            DatabaseIndexFile(entries).model_dump_json(indent=2)
+        )

@@ -3,7 +3,7 @@ from typing import IO
 import click
 from loguru import logger
 
-from markadoros.summary.results_models import ResultsReport
+from markadoros.summary.results_models import ExpectedTaxonInfo, ResultsReport
 from markadoros.taxonomy.taxonomy import BinsTaxa, GOATSynonymGetter
 
 
@@ -71,8 +71,7 @@ def update_species(
         f"Updating expexted taxon to {expected_taxon} with synonyms {input_synonyms}."
     )
     summary.update_expected_species(
-        expected_taxon=expected_taxon,
-        synonyms=input_synonyms,
+        expected_taxon=ExpectedTaxonInfo(taxon=expected_taxon, synonyms=input_synonyms),
         bin_taxa=bins_taxa,
     )
 

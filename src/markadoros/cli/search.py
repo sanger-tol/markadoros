@@ -1,4 +1,3 @@
-import json
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -6,13 +5,14 @@ from pathlib import Path
 import click
 from loguru import logger
 
+from markadoros.database.database_index import DatabaseIndex
 from markadoros.search.search_pipeline import SearchPipeline
+from markadoros.summary.results_models import ExpectedTaxonInfo
 from markadoros.taxonomy.taxonomy import GOATSynonymGetter
 from markadoros.utils.input_types import get_valid_input_types, normalize_input_type
 from markadoros.utils.utils import (
     get_simple_name,
     set_mmseqs_path,
-    validate_and_load_index,
 )
 
 
@@ -155,8 +155,8 @@ def search(
 
     # Load and validate database
     try:
-        database_index = validate_and_load_index(Path(index))
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+        database_index = DatabaseIndex(Path(index)).load()
+    except (FileNotFoundError, ValueError) as e:
         raise click.ClickException(f"Could not load database from {index}: {e}")
 
     # Handle synonym finding
@@ -181,6 +181,12 @@ def search(
 
     tmpdir = Path(outdir) / f"{prefix}.tmp"
 
+    expected = (
+        ExpectedTaxonInfo(taxon=expected_taxon, synonyms=input_synonyms)
+        if expected_taxon
+        else None
+    )
+
     # Run pipeline
     pipeline = SearchPipeline(
         outdir=Path(outdir),
@@ -189,8 +195,7 @@ def search(
         input_type=input_type,
         database_index=database_index,
         db_to_tmpdir=db_to_tmpdir,
-        expected_taxon=expected_taxon,
-        synonyms=input_synonyms,
+        expected_taxon=expected,
         min_seq_id=min_seq_id,
         min_aln_len=min_aln_len,
         save_contigs=save_contigs,
