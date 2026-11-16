@@ -54,9 +54,8 @@ jobs:
           conda install -c bioconda -c conda-forge -y mmseqs2 hifiasm spades
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
+        uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.8"
           python-version: ${{ matrix.python-version }}
 
       - name: Set up Python
