@@ -162,10 +162,11 @@ class ResultsReport(BaseModel):
         with gzip.open(self.input.database.parent / "taxon.json.gz", "rt") as fh:
             taxa = json.load(fh)
 
+        expected_names = [expected_taxon, *(synonyms or [])]
         self.input.expected_taxon = ExpectedTaxonInfo(
             taxon=expected_taxon,
             synonyms=synonyms,
-            counts=taxa.get(expected_taxon, None),
+            counts={name: taxa[name] for name in expected_names if name in taxa},
         )
 
         if self.results is not None and self.summary is not None:
@@ -181,12 +182,11 @@ class ResultsReport(BaseModel):
                 for hit in flat_records
                 if hit.expected_taxon_match_type == "synonym_match"
             ]
-            if expected_taxon_hits:
-                self.summary.n_expected_taxon_hits = len(expected_taxon_hits)
-                self.summary.n_synonym_hits = len(synonym_hits)
-                self.summary.expected_taxon_top_result = (
-                    expected_taxon_hits[0] if expected_taxon_hits else None
-                )
+            self.summary.n_expected_taxon_hits = len(expected_taxon_hits)
+            self.summary.n_synonym_hits = len(synonym_hits)
+            self.summary.expected_taxon_top_result = (
+                expected_taxon_hits[0] if expected_taxon_hits else None
+            )
 
     def iter_hit_records(self) -> Iterator[HitRecord]:
         """Yield every HitRecord in the summary and per-target results."""
