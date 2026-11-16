@@ -4,6 +4,8 @@ import polars as pl
 from isal import igzip
 from loguru import logger
 
+from markadoros.database.sequence_header import SequenceHeader
+
 
 class BoldTSVProcessor:
     def __init__(self, tmpdir: Path):
@@ -94,32 +96,30 @@ class BoldTSVProcessor:
             .group_by("bin_uri")
         )
 
-        df = (
-            df_lazy.map_groups(
-                lambda group: self.select_best_row(group, self.taxonomy_levels),
-                schema=schema,
-            )
-            .collect(engine="streaming")
-        )
+        df = df_lazy.map_groups(
+            lambda group: self.select_best_row(group, self.taxonomy_levels),
+            schema=schema,
+        ).collect(engine="streaming")
 
         bins = (
             df_lazy.agg(
-                pl.concat_list([
-                    pl.col("species"),
-                    pl.col("genus"),
-                    pl.col("tribe"),
-                    pl.col("subfamily"),
-                    pl.col("family"),
-                    pl.col("order"),
-                    pl.col("class"),
-                    pl.col("phylum"),
-                    pl.col("kingdom"),
-                ])
+                pl.concat_list(
+                    [
+                        pl.col("species"),
+                        pl.col("genus"),
+                        pl.col("tribe"),
+                        pl.col("subfamily"),
+                        pl.col("family"),
+                        pl.col("order"),
+                        pl.col("class"),
+                        pl.col("phylum"),
+                        pl.col("kingdom"),
+                    ]
+                )
                 .list.drop_nulls()
                 .list.first()
                 .alias("taxonomy")
-            )
-            .collect(engine="streaming")
+            ).collect(engine="streaming")
         ).to_dicts()
 
         bins_taxa = {row["bin_uri"]: list(set(row["taxonomy"])) for row in bins}
@@ -144,7 +144,13 @@ class BoldTSVProcessor:
                 ]
                 lineage_str = ",".join(lineage) if lineage else "None"
 
-                header = f">{row['processid']}/{row['bin_uri']}|{row['marker_code']}|Ignored|{lineage_str}\n"
+                sequence_header = SequenceHeader(
+                    seq_id=f"{row['processid']}/{row['bin_uri']}",
+                    marker=row["marker_code"],
+                    taxon="Ignored",
+                    lineage=lineage_str,
+                )
+                header = f">{sequence_header.to_header()}\n"
                 nuc = row.get("nuc") or ""
 
                 collected.append(header.encode("utf-8") + nuc.encode("utf-8") + b"\n")

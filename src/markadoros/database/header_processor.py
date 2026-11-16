@@ -1,5 +1,8 @@
-def process_bold_header(header: str) -> tuple[str, str, str]:
-    """Process a BOLD FASTA header and return the new FASTA header."""
+from markadoros.database.sequence_header import SequenceHeader
+
+
+def process_bold_header(header: str) -> SequenceHeader:
+    """Process a BOLD FASTA header into a SequenceHeader."""
     split_header = header.split("|")
 
     if len(split_header) != 4:
@@ -26,56 +29,51 @@ def process_bold_header(header: str) -> tuple[str, str, str]:
     else:
         taxon = filtered[-1] if filtered else "NA"
 
-    return marker, taxon, "|".join([seq_id, marker, taxon, lineage]).replace(" ", "_")
+    return SequenceHeader(seq_id=seq_id, marker=marker, taxon=taxon, lineage=lineage)
 
 
-def process_unite_header(header: str) -> tuple[str, str, str]:
-    """Process a UNITE FASTA header and return the new FASTA header."""
+def process_unite_header(header: str) -> SequenceHeader:
+    """Process a UNITE FASTA header into a SequenceHeader."""
     split_header = header.split("|")
 
     if not len(split_header) == 5 or ";" not in split_header[4]:
         raise ValueError(f"Invalid UNITE header: {header}")
 
-    seq_id = split_header[1] + "/" + split_header[2]
-    marker = "ITS"
-    lineage = split_header[4]
-    taxon = split_header[0]
+    return SequenceHeader(
+        seq_id=split_header[1] + "/" + split_header[2],
+        marker="ITS",
+        taxon=split_header[0],
+        lineage=split_header[4],
+    )
 
-    return marker, taxon, "|".join([seq_id, marker, taxon, lineage]).replace(" ", "_")
 
-
-def process_silva_lsu_header(header: str) -> tuple[str, str, str]:
-    """Process a SILVA FASTA header and return the new FASTA header."""
+def process_silva_lsu_header(header: str) -> SequenceHeader:
+    """Process a SILVA LSU FASTA header into a SequenceHeader."""
     split_header = header.split(" ", 1)
-    seq_id = split_header[0]
-    marker = "LSU"
     lineage = split_header[1]
     taxon = [x for x in lineage.split(";") if x is not None][-1]
 
-    return marker, taxon, "|".join([seq_id, marker, taxon, lineage]).replace(" ", "_")
+    return SequenceHeader(
+        seq_id=split_header[0], marker="LSU", taxon=taxon, lineage=lineage
+    )
 
 
-def process_silva_ssu_header(header: str) -> tuple[str, str, str]:
-    """Process a SILVA FASTA header and return the new FASTA header."""
+def process_silva_ssu_header(header: str) -> SequenceHeader:
+    """Process a SILVA SSU FASTA header into a SequenceHeader."""
     split_header = header.split(" ", 1)
-    seq_id = split_header[0]
-    marker = "SSU"
     lineage = split_header[1]
     taxon = lineage.split(";")[-1]
 
-    return marker, taxon, "|".join([seq_id, marker, taxon, lineage]).replace(" ", "_")
+    return SequenceHeader(
+        seq_id=split_header[0], marker="SSU", taxon=taxon, lineage=lineage
+    )
 
 
-def process_generic_header(header: str) -> tuple[str, str, str]:
-    """Process a generic FASTA header and return the new FASTA header."""
-    split_header = header.split("|")
-
-    if not len(split_header) == 4:
+def process_generic_header(header: str) -> SequenceHeader:
+    """Process a generic FASTA header into a SequenceHeader."""
+    if not len(header.split("|")) == 4:
         raise ValueError(
             f"Invalid header: {header}. Expected header with format '><seq_id>|<marker>|<taxon name>|<lineage>'"
         )
 
-    marker = split_header[1]
-    taxon = split_header[2]
-
-    return marker, taxon.replace("_", " "), header.replace(" ", "_")
+    return SequenceHeader.from_header(header)

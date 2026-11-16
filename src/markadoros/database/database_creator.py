@@ -9,6 +9,7 @@ from loguru import logger
 from markadoros.database.database_fasta_processor import DatabaseFASTAProcessor
 from markadoros.database.database_index import DatabaseEntry, DatabaseIndex
 from markadoros.database.mmseqs_database_builder import MMSeqsDatabaseBuilder
+from markadoros.database.sequence_header import SequenceHeader
 
 
 class DatabaseCreator:
@@ -17,7 +18,7 @@ class DatabaseCreator:
     def __init__(
         self,
         outdir: Path,
-        header_processor: Callable[[str], tuple[str, str, str]] | None = None,
+        header_processor: Callable[[str], SequenceHeader] | None = None,
         exclude_file: Path | None = None,
         deduplicate: bool = True,
         cluster: bool = False,

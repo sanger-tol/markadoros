@@ -10,6 +10,7 @@ from isal import igzip
 from loguru import logger
 
 from markadoros.database.header_processor import process_generic_header
+from markadoros.database.sequence_header import SequenceHeader
 
 
 class DatabaseFASTAProcessor:
@@ -18,7 +19,7 @@ class DatabaseFASTAProcessor:
     def __init__(
         self,
         deduplicate: bool = True,
-        header_processor: Callable[[str], tuple[str, str, str]] | None = None,
+        header_processor: Callable[[str], SequenceHeader] | None = None,
         tmpdir: Path | None = None,
         min_length: int = 200,
         threads: int = 0,
@@ -130,12 +131,14 @@ class DatabaseFASTAProcessor:
                         continue
 
                     header = self._get_header(record)
-                    marker, _taxon, output_header = self.header_processor(header)
+                    sequence_header = self.header_processor(header)
 
                     if any(pattern.search(header) for pattern in self._exclusions):
                         continue
 
-                    matching_dbs = self._find_matching_databases(marker, databases)
+                    matching_dbs = self._find_matching_databases(
+                        sequence_header.marker, databases
+                    )
                     if not matching_dbs:
                         continue
 
@@ -158,7 +161,7 @@ class DatabaseFASTAProcessor:
 
                         record_counts[db_name] += 1
                         chunks[db_name].append(
-                            f">{output_header}\n{sequence}\n".encode()
+                            f">{sequence_header.to_header()}\n{sequence}\n".encode()
                         )
 
                         if len(chunks[db_name]) >= 100_000:

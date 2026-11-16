@@ -10,6 +10,8 @@ from pymmseqs.config import CreateDBConfig as CreateMMSeqsDBConfig
 from pymmseqs.config import CreateIndexConfig as MMSeqsCreateIndexConfig
 from pymmseqs.config import EasyLinClustConfig as MMSeqsEasyLinClustConfig
 
+from markadoros.database.sequence_header import SequenceHeader
+
 
 class MMSeqsDatabaseBuilder:
     """Handles MMSeqs2 database creation and indexing."""
@@ -94,7 +96,7 @@ class MMSeqsDatabaseBuilder:
                     header = " ".join([record.name, record.comment])
 
                 record_counts += 1
-                taxon = header.split("|")[2].replace("_", " ")
+                taxon = SequenceHeader.from_header(header).taxon
                 taxon_counts[taxon] = taxon_counts.get(taxon, 0) + 1
 
         return record_counts, taxon_counts

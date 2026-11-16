@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import pysam
 from loguru import logger
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from markadoros.taxonomy.taxonomy import BinsTaxa
 from markadoros.utils.input_types import InputType
+from markadoros.utils.sequence_header import SequenceHeader
 from markadoros.utils.utils import extract_subsequence, get_mmseqs_version
 
 if TYPE_CHECKING:
@@ -39,6 +40,16 @@ class HitRecord(BaseModel):
     evalue: float
     bits: float
     sequence: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def split_query_header(cls, data: Any) -> Any:
+        """Populate seq_id, marker, taxon and lineage from a raw search ``query``."""
+        if isinstance(data, dict) and "query" in data:
+            data = dict(data)
+            header = SequenceHeader.from_header(data.pop("query"))
+            data.update(header.model_dump())
+        return data
 
     def model_post_init(self, context: Any, /):
         if self.coverage is None:
@@ -261,14 +272,10 @@ class ResultsReport(BaseModel):
                 if record.sequence is not None:
                     sequences[record.name] = record.sequence.upper()
 
-        result["seq_id"] = result["query"].str.split("|").str[0]
-        result["marker"] = result["query"].str.split("|").str[1]
-        result["taxon"] = result["query"].str.split("|").str[2].str.replace("_", " ")
-        result["lineage"] = result["query"].str.split("|").str[3]
         result["sequence"] = result.apply(
             lambda row: extract_subsequence(row, sequences), axis=1
         )
-        result = result.sort_values(by=["evalue"], ascending=[False])
+        result = result.sort_values(by=["evalue"], ascending=[True])
         records = result.to_dict(orient="records")
 
         results_list = [HitRecord(**record) for record in records]
